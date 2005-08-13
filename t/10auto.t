@@ -1,10 +1,12 @@
 use Test::More;
 
-plan tests => 2;
+BEGIN {
+    plan tests => 2;
 
-use lib qw(t/lib);
+    use lib qw(t/lib);
 
-use_ok('DBICTest');
+    use_ok('DBICTest');
+}
 
 DBICTest::Artist->load_components(qw/PK::Auto::SQLite/);
 

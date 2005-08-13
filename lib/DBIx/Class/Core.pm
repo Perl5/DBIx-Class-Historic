@@ -6,14 +6,25 @@ no warnings 'qw';
 
 use base qw/DBIx::Class/;
 
-__PACKAGE__->load_components(qw/
-  InflateColumn
-  Relationship
-  PK
-  Row
-  Table
-  Exception
-  AccessorGroup/);
+BEGIN {
+  __PACKAGE__->load_components(qw/
+    InflateColumn
+    Relationship
+    PK
+    Row
+    Validation
+    Table
+    Exception
+    AccessorGroup
+  /);
+
+  __PACKAGE__->load_types(qw/
+    column
+    number
+    object
+    string
+  /);
+}
 
 1;
 

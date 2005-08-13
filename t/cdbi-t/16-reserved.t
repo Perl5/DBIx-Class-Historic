@@ -1,14 +1,15 @@
 use strict;
 use Test::More;
+use Test::NoWarnings;
 
 BEGIN {
 	eval "use DBD::SQLite";
-	plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 5);
-}
+	plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 6);
 
-use lib 't/testlib';
-require Film;
-require Order;
+    use lib 't/testlib';
+    use Film;
+    use Order;
+}
 
 Film->has_many(orders => 'Order');
 Order->has_a(film => 'Film');

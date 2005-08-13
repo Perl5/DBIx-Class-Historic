@@ -1,10 +1,12 @@
 use Test::More;
 
-plan tests => 14;
+BEGIN {
+    plan tests => 14;
 
-use lib qw(t/lib);
+    use lib qw(t/lib);
 
-use_ok('DBICTest');
+    use_ok('DBICTest');
+}
 
 # has_a test
 my $cd = DBICTest::CD->find(4);

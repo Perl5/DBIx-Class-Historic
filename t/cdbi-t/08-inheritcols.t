@@ -1,22 +1,25 @@
 #!/usr/bin/perl -w
 
 use strict;
-use Test::More tests => 3;
+use Test::More tests => 4;
+use Test::NoWarnings;
 
 use DBIx::Class;
 
-package A;
-@A::ISA = qw(DBIx::Class);
-__PACKAGE__->load_components(qw/CDBICompat Core/);
-__PACKAGE__->columns(Primary => 'id');
-
-package A::B;
-@A::B::ISA = 'A';
-__PACKAGE__->columns(All => qw(id b1));
-
-package A::C;
-@A::C::ISA = 'A';
-__PACKAGE__->columns(All => qw(id c1 c2 c3));
+BEGIN {
+    package A;
+    @A::ISA = qw(DBIx::Class);
+    __PACKAGE__->load_components(qw/CDBICompat Core/);
+    __PACKAGE__->columns(Primary => 'id');
+    
+    package A::B;
+    @A::B::ISA = 'A';
+    __PACKAGE__->columns(All => qw(id b1));
+    
+    package A::C;
+    @A::C::ISA = 'A';
+    __PACKAGE__->columns(All => qw(id c1 c2 c3));
+}
 
 package main;
 is join (' ', sort A->columns),    'id',          "A columns";

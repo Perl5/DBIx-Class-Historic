@@ -1,12 +1,12 @@
 use strict;
 use Test::More;
+use Test::NoWarnings;
+use Test::Warn;
 
 BEGIN {
 	eval "use DBD::SQLite";
-	plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 53);
-}
+	plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 55);
 
-INIT {
 	#local $SIG{__WARN__} =
 		#sub { like $_[0], qr/clashes with built-in method/, $_[0] };
 	use lib 't/testlib';
@@ -14,24 +14,24 @@ INIT {
 	require Actor;
 	Actor->has_a(film => 'Film');
 	sub Class::DBI::sheep { ok 0; }
-}
 
-sub Film::mutator_name {
-	my ($class, $col) = @_;
-	return "set_sheep" if lc $col eq "numexplodingsheep";
-	return $col;
-}
-
-sub Film::accessor_name {
-	my ($class, $col) = @_;
-	return "sheep" if lc $col eq "numexplodingsheep";
-	return $col;
-}
-
-sub Actor::accessor_name {
-	my ($class, $col) = @_;
-	return "movie" if lc $col eq "film";
-	return $col;
+    sub Film::mutator_name {
+    	my ($class, $col) = @_;
+    	return "set_sheep" if lc $col eq "numexplodingsheep";
+    	return $col;
+    }
+    
+    sub Film::accessor_name {
+    	my ($class, $col) = @_;
+    	return "sheep" if lc $col eq "numexplodingsheep";
+    	return $col;
+    }
+    
+    sub Actor::accessor_name {
+    	my ($class, $col) = @_;
+    	return "movie" if lc $col eq "film";
+    	return $col;
+    }
 }
 
 my $data = {
@@ -56,10 +56,12 @@ eval {
 };
 is $@, '', "No errors";
 
-eval {
-	my @film = Film->search({ sheep => 1 });
-	is @film, 2, "Can search with modified accessor";
-};
+warning_like {
+    eval {
+    	my @film = Film->search({ sheep => 1 });
+    	is @film, 2, "Can search with modified accessor";
+    };
+} qr/no such column: sheep/;
 
 {
 

@@ -11,6 +11,7 @@ my %arguments = (
         'Test::NoWarnings' => '0.08',
         'Test::Manifest'   => '1.11',
         'Test::More'       => '0.60',
+        'Test::Warn'       => '0.08',
     },
     requires           => {
         'Data::Page'                => 0,

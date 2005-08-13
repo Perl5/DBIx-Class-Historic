@@ -4,11 +4,11 @@ use Test::More;
 BEGIN {
     eval "use DBD::SQLite";
     plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 10);
-}                                                                               
 
-use lib qw(t/lib);
+    use lib qw(t/lib);
 
-use_ok('DBICTest');
+    use_ok('DBICTest');
+}
 
 # test LIMIT
 my $it = DBICTest::CD->search( {},

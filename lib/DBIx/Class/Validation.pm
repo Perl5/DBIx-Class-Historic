@@ -21,7 +21,7 @@ use Class::Std;
         return;
     }
 
-    sub get_field : RESTRICTED method {
+    sub get_field : method {
         my ( $class, $field_name ) = @_;
 
         croak 'must supply a field name'
@@ -47,23 +47,23 @@ use Class::Std;
         return $field_class->get_instance;
     }
 
-    sub set_field_label : RESTRICTED method {
+    sub set_field_label : method {
         return shift->get_field(shift)->set_label(shift);
     }
 
-    sub set_field_description : RESTRICTED method {
+    sub set_field_description : method {
         return shift->get_field(shift)->set_description(shift);
     }
 
-    sub set_field_default : RESTRICTED method {
+    sub set_field_default : method {
         return shift->get_field(shift)->set_default(shift);
     }
 
-    sub set_field_read_only : RESTRICTED method {
+    sub set_field_read_only : method {
         return shift->get_field(shift)->set_is_read_only(1);
     }
 
-    sub set_field : RESTRICTED method {
+    sub set_field : method {
         my ( $class, $field_name, $attr ) = @_;
 
         while ( my ( $attr, $value ) = each %{$attr} ) {
@@ -74,7 +74,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_presence_of : RESTRICTED method {
+    sub validates_presence_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
         $class->get_field($field_name)->set_is_required(1);
@@ -86,7 +86,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_allowed_values_of : RESTRICTED method {
+    sub validates_allowed_values_of : method {
         my ( $class, $field_name, $allowed_values, $opt ) = @_;
 
         $class->get_field($field_name)
@@ -99,7 +99,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_disallowed_values_of : RESTRICTED method {
+    sub validates_disallowed_values_of : method {
         my ( $class, $field_name, $disallowed_values, $opt ) = @_;
 
         $class->get_field($field_name)
@@ -112,7 +112,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_each_with : RESTRICTED method {
+    sub validates_each_with : method {
         my ( $class, $field_name, $callbacks, $opt ) = @_;
 
         $class->get_field($field_name)

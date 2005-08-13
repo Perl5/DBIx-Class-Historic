@@ -5,52 +5,54 @@ use Test::More tests => 25;
 #-----------------------------------------------------------------------
 # Make sure that we can set up columns properly
 #-----------------------------------------------------------------------
-package State;
+BEGIN {
+  package State;
+  
+  use base 'DBIx::Class';
+  State->load_components(qw/CDBICompat Core/);
+  
+  State->table('State');
+  State->columns(Essential => qw/Abbreviation Name/);
+  State->columns(Primary =>   'Name');
+  State->columns(Weather =>   qw/Rain Snowfall/);
+  State->columns(Other =>     qw/Capital Population/);
+  #State->has_many(cities => "City");
 
-use base 'DBIx::Class';
-State->load_components(qw/CDBICompat Core/);
-
-State->table('State');
-State->columns(Essential => qw/Abbreviation Name/);
-State->columns(Primary =>   'Name');
-State->columns(Weather =>   qw/Rain Snowfall/);
-State->columns(Other =>     qw/Capital Population/);
-#State->has_many(cities => "City");
-
-sub accessor_name {
-	my ($class, $column) = @_;
-	my $return = $column eq "Rain" ? "Rainfall" : $column;
-	return $return;
+  sub accessor_name {
+  	my ($class, $column) = @_;
+  	my $return = $column eq "Rain" ? "Rainfall" : $column;
+  	return $return;
+  }
+  
+  sub mutator_name {
+  	my ($class, $column) = @_;
+  	my $return = $column eq "Rain" ? "set_Rainfall" : "set_$column";
+  	return $return;
+  }
+  
+  sub Snowfall { 1 }
+  
+  
+  package City;
+  
+  use base 'DBIx::Class';
+  City->load_components(qw/CDBICompat Core/);
+  
+  City->table('City');
+  City->columns(All => qw/Name State Population/);
+  City->has_a(State => 'State');
+  
+  
+  #-------------------------------------------------------------------------
+  package CD;
+  use base 'DBIx::Class';
+  CD->load_components(qw/CDBICompat Core/);
+  
+  CD->table('CD');
+  CD->columns('All' => qw/artist title length/);
+  
+  #-------------------------------------------------------------------------
 }
-
-sub mutator_name {
-	my ($class, $column) = @_;
-	my $return = $column eq "Rain" ? "set_Rainfall" : "set_$column";
-	return $return;
-}
-
-sub Snowfall { 1 }
-
-
-package City;
-
-use base 'DBIx::Class';
-City->load_components(qw/CDBICompat Core/);
-
-City->table('City');
-City->columns(All => qw/Name State Population/);
-City->has_a(State => 'State');
-
-
-#-------------------------------------------------------------------------
-package CD;
-use base 'DBIx::Class';
-CD->load_components(qw/CDBICompat Core/);
-
-CD->table('CD');
-CD->columns('All' => qw/artist title length/);
-
-#-------------------------------------------------------------------------
 
 package main;
 
@@ -116,20 +118,22 @@ ok(!State->find_column('HGLAGAGlAG'), '!find_column HGLAGAGlAG');
 #-----------------------------------------------------------------------
 # Make sure that columns inherit properly
 #-----------------------------------------------------------------------
-package State;
-
-package A;
-@A::ISA = qw(DBIx::Class);
-__PACKAGE__->load_components(qw/CDBICompat Core/);
-__PACKAGE__->columns(Primary => 'id');
-
-package A::B;
-@A::B::ISA = 'A';
-__PACKAGE__->columns(All => qw(id b1));
-
-package A::C;
-@A::C::ISA = 'A';
-__PACKAGE__->columns(All => qw(id c1 c2 c3));
+BEGIN {
+  package State;
+  
+  package A;
+  @A::ISA = qw(DBIx::Class);
+  __PACKAGE__->load_components(qw/CDBICompat Core/);
+  __PACKAGE__->columns(Primary => 'id');
+  
+  package A::B;
+  @A::B::ISA = 'A';
+  __PACKAGE__->columns(All => qw(id b1));
+  
+  package A::C;
+  @A::C::ISA = 'A';
+  __PACKAGE__->columns(All => qw(id c1 c2 c3));
+}
 
 package main;
 is join (' ', sort A->columns),    'id',          "A columns";

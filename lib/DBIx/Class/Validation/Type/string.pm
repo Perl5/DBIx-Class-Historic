@@ -2,12 +2,11 @@ package DBIx::Class::Validation::Type::string;
 
 use strict;
 use warnings FATAL => 'all';
-use base qw( DBIx::Class::Validation );
 use Carp qw( croak );
 use DBIx::Class::Field::Type::string;
 use Class::Std;
 {
-    sub validates_length_of : RESTRICTED method {
+    sub validates_length_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
         $class->_add_string_type_to_field($field_name);
@@ -29,7 +28,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_allowed_chars_of : RESTRICTED method {
+    sub validates_allowed_chars_of : method {
         my ( $class, $field_name, $allowed_chars, $opt ) = @_;
 
         $class->_add_string_type_to_field($field_name);
@@ -44,7 +43,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_disallowed_chars_of : RESTRICTED method {
+    sub validates_disallowed_chars_of : method {
         my ( $class, $field_name, $disallowed_chars, $opt ) = @_;
 
         $class->_add_string_type_to_field($field_name);
@@ -59,7 +58,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_format_of : RESTRICTED method {
+    sub validates_format_of : method {
         my ( $class, $field_name, $format, $opt ) = @_;
 
         $class->_add_string_type_to_field($field_name);

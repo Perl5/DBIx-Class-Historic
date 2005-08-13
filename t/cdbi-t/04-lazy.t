@@ -1,5 +1,8 @@
 use strict;
 use Test::More;
+use Test::NoWarnings;
+use Test::Exception;
+use Test::Warn;
 
 #----------------------------------------------------------------------
 # Test lazy loading
@@ -7,7 +10,7 @@ use Test::More;
 
 BEGIN {
 	eval "use DBD::SQLite";
-	plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 25);
+	plan $@ ? (skip_all => 'needs DBD::SQLite for testing') : (tests => 28);
 }
 
 INIT {
@@ -58,18 +61,22 @@ ok(!$obj->_attribute_exists('that'), 'nor that');
 
 # Test contructor breaking.
 
-eval {    # Need a hashref
-	Lazy->create(this => 10, that => 20, oop => 30, opop => 40, eep => 50);
+eval {
+        Lazy->create(this => 10, that => 20, oop => 30, opop => 40, eep => 50) 
 };
 ok($@, $@);
 
-eval {    # False column
-	Lazy->create({ this => 10, that => 20, theother => 30 });
-};
+
+warning_like {
+        eval {    # False column
+	        Lazy->create({ this => 10, that => 20, theother => 30 });
+        };
+} qr/table Lazy has no column named theother/;
 ok($@, $@);
 
-eval {    # Multiple false columns
-	Lazy->create({ this => 10, that => 20, theother => 30, andanother => 40 });
-};
+warning_like {
+        eval {    # Multiple false columns
+	        Lazy->create({ this => 10, that => 20, theother => 30, andanother => 40 });
+        };
+} qr/table Lazy has no column named andanother/;
 ok($@, $@);
-

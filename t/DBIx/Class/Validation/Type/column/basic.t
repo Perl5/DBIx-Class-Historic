@@ -4,7 +4,7 @@ package My::Test;
 
 use strict;
 use warnings FATAL   => 'all';
-use Test::More tests => 15;
+use Test::More tests => 7;
 use Test::Exception;
 use Test::NoWarnings;
 use base qw(DBIx::Class::Validation);
@@ -31,8 +31,6 @@ isa_ok $field, $class .'::Field::id';
 SET_FIELD_COMMON: {
     my %attr = (
         column_name => 'Test ID',
-        deflate     => [],
-        inflate     => [],
     );
 
     while ( my ( $attr, $value ) = each %attr ) {

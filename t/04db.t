@@ -1,10 +1,12 @@
 use Test::More;
 
-plan tests => 4;
+BEGIN {
+    plan tests => 4;
 
-use lib qw(t/lib);
+    use lib qw(t/lib);
 
-use_ok('DBICTest');
+    use_ok('DBICTest');
+}
 
 # add some rows inside a transaction and commit it
 # XXX: Is storage->dbh the only way to get a dbh?

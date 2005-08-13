@@ -1,10 +1,12 @@
 use Test::More;
 
-plan tests => 23;
+BEGIN {
+    plan tests => 23;
 
-use lib qw(t/lib);
+    use lib qw(t/lib);
 
-use_ok('DBICTest');
+    use_ok('DBICTest');
+}
 
 my @art = DBICTest::Artist->search({ }, { order_by => 'name DESC'});
 

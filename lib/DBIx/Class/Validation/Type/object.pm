@@ -2,12 +2,11 @@ package DBIx::Class::Validation::Type::object;
 
 use strict;
 use warnings FATAL => 'all';
-use base qw( DBIx::Class::Validation );
 use Carp qw( croak );
 use DBIx::Class::Field::Type::object;
 use Class::Std;
 {
-    sub validates_roles_of : RESTRICTED method {
+    sub validates_roles_of : method {
         my ( $class, $field_name, $roles, $opt ) = @_;
 
         $class->_add_object_type_to_field($field_name);
@@ -21,7 +20,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_classes_of : RESTRICTED method {
+    sub validates_classes_of : method {
         my ( $class, $field_name, $classes, $opt ) = @_;
 
         $class->_add_object_type_to_field($field_name);

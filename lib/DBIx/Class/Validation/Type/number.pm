@@ -2,12 +2,11 @@ package DBIx::Class::Validation::Type::number;
 
 use strict;
 use warnings FATAL => 'all';
-use base qw( DBIx::Class::Validation );
 use Carp qw( croak );
 use DBIx::Class::Field::Type::number;
 use Class::Std;
 {
-    sub validates_numericality_of : RESTRICTED method {
+    sub validates_numericality_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
         my $field       = $class->get_field($field_name);
@@ -25,7 +24,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_range_of : RESTRICTED method {
+    sub validates_range_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
         $class->validates_numericality_of($field_name);
@@ -47,7 +46,7 @@ use Class::Std;
         return;
     }
 
-    sub validates_precision_of : RESTRICTED method {
+    sub validates_precision_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
         $class->validates_numericality_of($field_name);

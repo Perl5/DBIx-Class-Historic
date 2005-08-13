@@ -39,7 +39,12 @@ sub _register_columns {
   my ($class, @cols) = @_;
   my $names = { %{$class->_columns} };
   $names->{$_} ||= {} for @cols;
-  $class->_columns($names); 
+  $class->_columns($names);
+
+  foreach my $name (@cols) {
+    $class->set_field_column_name($name => $name);
+    $class->_columns->{$name}{field} = $class->get_field($name);
+  }  
 }
 
 sub _mk_column_accessors {
@@ -145,7 +150,9 @@ sub search_like {
 }
 
 sub _select_columns {
-  return keys %{$_[0]->_columns};
+  return
+    map { $_->{field}->get_name }
+    values %{$_[0]->_columns};
 }
 
 =item table
@@ -174,7 +181,11 @@ sub find_or_create {
   return defined($exists) ? $exists : $class->create($hash);
 }
 
-sub columns { return keys %{shift->_columns}; }
+sub columns { 
+  return
+    map { $_->{field}->get_name }
+    values %{$_[0]->_columns};
+}
 
 1;
 

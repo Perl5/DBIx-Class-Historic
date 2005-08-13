@@ -1,13 +1,15 @@
 use Test::More;
 
-eval { require DateTime };
-plan skip_all => "Need DateTime for inflation tests" if $@;
+BEGIN {
+    eval { require DateTime };
+    plan skip_all => "Need DateTime for inflation tests" if $@;
 
-plan tests => 7;
+    plan tests => 7;
 
-use lib qw(t/lib);
+    use lib qw(t/lib);
 
-use_ok('DBICTest');
+    use_ok('DBICTest');
+}
 
 DBICTest::CD->load_components(qw/CDBICompat::HasA/);
 
