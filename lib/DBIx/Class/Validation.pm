@@ -124,6 +124,19 @@ use Class::Std;
 
         return;
     }
+
+    sub _add_types_to_field : method {
+        my ( $class, $field_name, @type_names ) = @_;
+
+        my $field       = $class->get_field($field_name);
+        my $field_class = ref $field;
+
+        no strict 'refs';
+        push @{"${field_class}::ISA"},
+            grep { !$field->isa($_)               }
+            map  { "DBIx::Class::Field::Type::$_" }
+            @type_names;
+    }
 }
 
 1;

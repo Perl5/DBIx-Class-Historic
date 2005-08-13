@@ -9,23 +9,9 @@ use Class::Std;
     sub set_field_column_name : method {
         my ( $class, $field_name, $column_name ) = @_;
 
-        $class->_add_column_type_to_field($field_name);
+        $class->_add_types_to_field($field_name => 'column');
 
         return shift->get_field($field_name)->set_column_name($column_name);
-    }
-
-    sub _add_column_type_to_field : PRIVATE method {
-        my ( $class, $field_name, $opt ) = @_;
-
-        my $field       = $class->get_field($field_name);
-        my $field_class = ref $field;
-
-        no strict 'refs';
-        push @{"${field_class}::ISA"},
-            grep { !$field->isa($_) }
-            qw( DBIx::Class::Field::Type::column );
-
-        return;
     }
 }
 

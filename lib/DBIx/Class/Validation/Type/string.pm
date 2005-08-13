@@ -9,7 +9,7 @@ use Class::Std;
     sub validates_length_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
-        $class->_add_string_type_to_field($field_name);
+        $class->_add_types_to_field($field_name => 'string');
 
         my $field = $class->get_field($field_name);
 
@@ -31,7 +31,7 @@ use Class::Std;
     sub validates_allowed_chars_of : method {
         my ( $class, $field_name, $allowed_chars, $opt ) = @_;
 
-        $class->_add_string_type_to_field($field_name);
+        $class->_add_types_to_field($field_name => 'string');
 
         $class->get_field($field_name)
               ->set_allowed_chars($allowed_chars);
@@ -46,7 +46,7 @@ use Class::Std;
     sub validates_disallowed_chars_of : method {
         my ( $class, $field_name, $disallowed_chars, $opt ) = @_;
 
-        $class->_add_string_type_to_field($field_name);
+        $class->_add_types_to_field($field_name => 'string');
 
         $class->get_field($field_name)
               ->set_disallowed_chars($disallowed_chars);
@@ -61,7 +61,7 @@ use Class::Std;
     sub validates_format_of : method {
         my ( $class, $field_name, $format, $opt ) = @_;
 
-        $class->_add_string_type_to_field($field_name);
+        $class->_add_types_to_field($field_name => 'string');
 
         $class->get_field($field_name)
               ->set_format($format);
@@ -69,20 +69,6 @@ use Class::Std;
         # TODO: set up trigger points based on the $opt passed in.  Want
         #       to be able to validate during different DBIx::Class
         #       operations.
-
-        return;
-    }
-
-    sub _add_string_type_to_field : PRIVATE method {
-        my ( $class, $field_name, $opt ) = @_;
-
-        my $field       = $class->get_field($field_name);
-        my $field_class = ref $field;
-
-        no strict 'refs';
-        push @{"${field_class}::ISA"},
-            grep { !$field->isa($_) }
-            qw( DBIx::Class::Field::Type::string );
 
         return;
     }

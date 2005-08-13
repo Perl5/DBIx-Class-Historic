@@ -28,28 +28,26 @@ and depending on them.
 
 sub _ident_cond {
   my ($class) = @_;
-  return join(" AND ", map { "$_ = ?" } keys %{$class->_primaries});
+  return join " AND ", map { "$_ = ?" } $class->primary_columns;
 }
 
 sub _ident_values {
   my ($self) = @_;
-  return (map { $self->{_column_data}{$_} } keys %{$self->_primaries});
+  return map { $self->{_column_data}{$_} } $self->primary_columns;
 }
 
 sub set_primary_key {
   my ($class, @cols) = @_;
-  my %pri;
-  tie %pri, 'Tie::IxHash';
-  %pri = map { $_ => {} } @cols;
+  $class->add_columns(@cols);
+  tie my %pri, 'Tie::IxHash', map { $_ => {} } @cols;
   $class->_primaries(\%pri);
 }
 
 sub find {
   my ($class, @vals) = @_;
   my $attrs = (@vals > 1 && ref $vals[$#vals] eq 'HASH' ? pop(@vals) : {});
-  my @pk = keys %{$class->_primaries};
   $class->throw( "Can't find unless primary columns are defined" ) 
-    unless @pk;
+    unless my @pk = $class->primary_columns;
   my $query;
   if (ref $vals[0] eq 'HASH') {
     $query = $vals[0];

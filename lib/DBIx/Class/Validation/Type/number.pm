@@ -9,13 +9,7 @@ use Class::Std;
     sub validates_numericality_of : method {
         my ( $class, $field_name, $opt ) = @_;
 
-        my $field       = $class->get_field($field_name);
-        my $field_class = ref $field;
-
-        no strict 'refs';
-        push @{"${field_class}::ISA"},
-            grep { !$field->isa($_) }
-            qw( DBIx::Class::Field::Type::number );
+        $class->_add_types_to_field($field_name => 'number');
 
         # TODO: set up trigger points based on the $opt passed in.  Want
         #       to be able to validate during different DBIx::Class
