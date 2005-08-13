@@ -31,6 +31,14 @@ lib/DBIx/Class/Core.pm
 lib/DBIx/Class/Cursor.pm
 lib/DBIx/Class/DB.pm
 lib/DBIx/Class/Exception.pm
+lib/DBIx/Class/Field.pm
+lib/DBIx/Class/Field/Singleton.pm
+lib/DBIx/Class/Field/Type/auto_increment.pm
+lib/DBIx/Class/Field/Type/column.pm
+lib/DBIx/Class/Field/Type/identifier.pm
+lib/DBIx/Class/Field/Type/number.pm
+lib/DBIx/Class/Field/Type/object.pm
+lib/DBIx/Class/Field/Type/string.pm
 lib/DBIx/Class/InflateColumn.pm
 lib/DBIx/Class/PK.pm
 lib/DBIx/Class/PK/Auto.pm
@@ -51,7 +59,13 @@ lib/DBIx/Class/Storage/DBI.pm
 lib/DBIx/Class/Storage/DBI/Cursor.pm
 lib/DBIx/Class/Table.pm
 lib/DBIx/Class/Test/SQLite.pm
+lib/DBIx/Class/Validation.pm
+lib/DBIx/Class/Validation/Type/column.pm
+lib/DBIx/Class/Validation/Type/number.pm
+lib/DBIx/Class/Validation/Type/object.pm
+lib/DBIx/Class/Validation/Type/string.pm
 MANIFEST			This list of files
+META.yml
 script/nextalyzer.pl
 t/01core.t
 t/02pod.t
@@ -87,6 +101,23 @@ t/cdbi-t/19-set_sql.t
 t/cdbi-t/21-iterator.t
 t/cdbi-t/30-pager.t
 t/cdbi-t/98-failure.t
+t/DBIx/Class/Field/basic.t
+t/DBIx/Class/Field/Singleton/basic.t
+t/DBIx/Class/Field/Type/auto_increment/basic.t
+t/DBIx/Class/Field/Type/column/basic.t
+t/DBIx/Class/Field/Type/identifier/basic.t
+t/DBIx/Class/Field/Type/number/basic.t
+t/DBIx/Class/Field/Type/number/validate.t
+t/DBIx/Class/Field/Type/object/basic.t
+t/DBIx/Class/Field/Type/object/validate.t
+t/DBIx/Class/Field/Type/string/basic.t
+t/DBIx/Class/Field/Type/string/validate.t
+t/DBIx/Class/Field/validate.t
+t/DBIx/Class/Validation/basic.t
+t/DBIx/Class/Validation/Type/column/basic.t
+t/DBIx/Class/Validation/Type/number/basic.t
+t/DBIx/Class/Validation/Type/object/basic.t
+t/DBIx/Class/Validation/Type/string/basic.t
 t/lib/DBICTest.pm
 t/lib/DBICTest/Schema.pm
 t/lib/DBICTest/Schema/Artist.pm
@@ -97,6 +128,7 @@ t/lib/DBICTest/Schema/OneKey.pm
 t/lib/DBICTest/Schema/Tag.pm
 t/lib/DBICTest/Schema/Track.pm
 t/lib/DBICTest/Schema/TwoKeys.pm
+t/test_manifest
 t/testlib/Actor.pm
 t/testlib/Binary.pm
 t/testlib/Blurb.pm
@@ -114,6 +146,3 @@ t/testlib/MyStarLinkMCPK.pm
 t/testlib/Order.pm
 t/testlib/OtherFilm.pm
 t/testlib/PgBase.pm
-META.yml
-Makefile.PL
-README

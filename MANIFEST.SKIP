@@ -21,9 +21,11 @@
 \.tmp$
 \.old$
 \.bak$
+\.swp$
 \#$
 \b\.#
+\bTEST$
+\.DS_Store$
 
 # Don't ship the test db
 ^t/var
-
