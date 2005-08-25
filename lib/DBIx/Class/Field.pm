@@ -17,7 +17,9 @@ use List::MoreUtils qw( any none );
 use Class::Std;
 {
     my %name_of              : ATTR( :init_arg<name>              :get<name>                                                      );
-    my %label_of             : ATTR( :init_arg<label>             :get<label>             :set<label>             :default<undef> );
+    my %accessor_name_of     : ATTR( :init_arg<accessor_name>     :get<accessor_name>     :set<accessor_name>                     );
+    my %mutator_name_of      : ATTR( :init_arg<mutator_name>      :get<mutator_name>      :set<mutator_name>                      );
+    my %label_of             : ATTR( :init_arg<label>             :get<label>             :set<label>                             );
     my %description_of       : ATTR( :init_arg<description>       :get<description>       :set<description>       :default<undef> );
     my %allowed_values_of    : ATTR( :init_arg<allowed_values>    :get<allowed_values>    :set<allowed_values>    :default<[]>    );
     my %disallowed_values_of : ATTR( :init_arg<disallowed_values> :get<disallowed_values> :set<disallowed_values> :default<[]>    );
@@ -25,6 +27,27 @@ use Class::Std;
     my %is_read_only         : ATTR( :init_arg<is_read_only>      :get<is_read_only>      :set<is_read_only>      :default<0>     );
     my %is_required          : ATTR( :init_arg<is_required>       :get<is_required>       :set<is_required>       :default<0>     );
     my %default_of           : ATTR( :init_arg<default>           :get<default>           :set<default>           :default<undef> );
+
+    sub BUILD : method {
+        my ( $self, $ident, $arg_ref ) = @_;
+
+        $accessor_name_of{$ident} = $arg_ref->{accessor_name}
+            || $arg_ref->{name};
+        
+        $mutator_name_of{$ident}  = $arg_ref->{mutator_name}
+            || $arg_ref->{name};
+
+        if(!defined $self->get_label) {
+            $self->set_label(
+                join ' ',
+                map { ucfirst(lc $_) }
+                split '_',
+                $arg_ref->{name},
+            );
+        }
+
+        return;
+    }
 
     sub validate : CUMULATIVE method {
         shift->_validate(

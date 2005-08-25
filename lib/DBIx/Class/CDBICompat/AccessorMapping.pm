@@ -7,16 +7,10 @@ use NEXT;
 
 sub mk_group_accessors {
   my ($class, $group, @cols) = @_;
-  unless ($class->can('accessor_name') || $class->can('mutator_name')) {
-    return $class->NEXT::ACTUAL::mk_group_accessors($group => @cols);
-  }
   foreach my $col (@cols) {
-    my $ro_meth = ($class->can('accessor_name')
-                    ? $class->accessor_name($col)
-                    : $col);
-    my $wo_meth = ($class->can('mutator_name')
-                    ? $class->mutator_name($col)
-                    : $col);
+    my $field = $class->get_field($col);
+    my $ro_meth = $field->get_accessor_name;
+    my $wo_meth = $field->get_mutator_name;
     #warn "$col $ro_meth $wo_meth";
     if ($ro_meth eq $wo_meth) {
       $class->NEXT::ACTUAL::mk_group_accessors($group => [ $ro_meth => $col ]);
@@ -33,15 +27,13 @@ sub create {
   $attrs = { %$attrs };
   my %att;
   foreach my $col (keys %{ $class->_columns }) {
-    if ($class->can('accessor_name')) {
-      my $acc = $class->accessor_name($col);
-#warn "$col $acc";
-      $att{$col} = delete $attrs->{$acc} if exists $attrs->{$acc};
-    }
-    if ($class->can('mutator_name')) {
-      my $mut = $class->mutator_name($col);
-      $att{$col} = delete $attrs->{$mut} if exists $attrs->{$mut};
-    }
+    my $field = $class->get_field($col);
+
+    my $acc = $field->get_accessor_name;
+    $att{$col} = delete $attrs->{$acc} if exists $attrs->{$acc};
+
+    my $mut = $field->get_mutator_name;
+    $att{$col} = delete $attrs->{$mut} if exists $attrs->{$mut};
   }
   return $class->NEXT::ACTUAL::create({ %$attrs, %att }, @rest);
 }
