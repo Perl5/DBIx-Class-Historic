@@ -48,18 +48,16 @@ sub _register_column_group {
 
   foreach my $col (@cols) {
     $groups->{$group}{$col} ||= {};
-#    $class->set_field_column_name($col => $col);
-#
-#    my $field = $class->get_field($col);
-#
-#    if($class->can('accessor_name')) {
-#      $field->set_accessor_name($class->accessor_name($col));
-#    }
-#    if($class->can('mutator_name')) {
-#      $field->set_mutator_name($class->mutator_name($col));
-#    }
-#
-#    $class->_columns->{$col}{field} = $field;
+    $class->set_field_column_name($col => $col);
+
+    my $field = $class->get_field($col);
+
+    if($class->can('accessor_name')) {
+      $field->set_accessor_name($class->accessor_name($col));
+    }
+    if($class->can('mutator_name')) {
+      $field->set_mutator_name($class->mutator_name($col));
+    }
   }
 
   #if ($group eq 'Essential') {

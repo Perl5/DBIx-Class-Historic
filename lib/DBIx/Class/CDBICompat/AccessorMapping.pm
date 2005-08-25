@@ -35,16 +35,12 @@ sub create {
   my %att;
   foreach my $col (keys %{ $class->_columns }) {
     my $field = $class->get_field($col);
-    if ($class->can('accessor_name')) {
-      my $acc = $class->accessor_name($col);
-      $field->set_accessor_name($acc);
-      $att{$col} = delete $attrs->{$acc} if exists $attrs->{$acc};
-    }
-    if ($class->can('mutator_name')) {
-      my $mut = $class->mutator_name($col);
-      $field->set_mutator_name($mut);
-      $att{$col} = delete $attrs->{$mut} if exists $attrs->{$mut};
-    }
+
+    my $acc = $field->get_accessor_name;
+    $att{$col} = delete $attrs->{$acc} if exists $attrs->{$acc};
+
+    my $mut = $field->get_mutator_name;
+    $att{$col} = delete $attrs->{$mut} if exists $attrs->{$mut};
   }
   return $class->NEXT::ACTUAL::create({ %$attrs, %att }, @rest);
 }
