@@ -37,9 +37,9 @@ use Class::Std;
         $mutator_name_of{$ident}  = $arg_ref->{mutator_name}
             || $arg_ref->{name};
 
-        if(!defined $self->get_label) {
-            $self->set_label(
-                join ' ',
+        if(!exists $arg_ref->{label}) {
+            $label_of{$ident} = join(
+                ' ',
                 map { ucfirst(lc $_) }
                 split '_',
                 $arg_ref->{name},

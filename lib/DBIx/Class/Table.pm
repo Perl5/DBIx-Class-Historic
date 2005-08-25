@@ -41,9 +41,9 @@ sub _register_columns {
   $names->{$_} ||= {} for @cols;
   $class->_columns($names);
 
-  foreach my $name (@cols) {
-    $class->set_field_column_name($name => $name);
-    $class->_columns->{$name}{field} = $class->get_field($name);
+  foreach my $col (@cols) {
+    $class->set_field_column_name($col => $col);
+    $class->_columns->{$col}{field} = $class->get_field($col);
   }
 }
 

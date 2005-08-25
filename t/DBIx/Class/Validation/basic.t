@@ -60,16 +60,18 @@ SET_FIELD_COMMON: {
     );
 
     while ( my ( $attr, $value ) = each %attr ) {
-        my $mutator = "set_field_$attr";
+        my $accessor = "get_$attr";
+        my $mutator  = "set_field_$attr";
+
+        my $old = $field->$accessor;
 
         can_ok $class, $mutator;
         is(
             $class->$mutator( $field_name => $value ),
-            undef,
+            $old,
             "set field $attr",
         );
 
-        my $accessor = "get_$attr";
         is $field->$accessor, $value, "get field $attr";
 
         # returns the previous value on-set

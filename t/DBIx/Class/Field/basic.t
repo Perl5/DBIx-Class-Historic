@@ -23,7 +23,7 @@ NEW: {
 
 ATTRIBUTE_DEFAULTS: {
     my %attribute_defaults = (
-        label             => undef,
+        label             => 'Id',
         description       => undef,
         allowed_values    => [],
         callbacks         => [],

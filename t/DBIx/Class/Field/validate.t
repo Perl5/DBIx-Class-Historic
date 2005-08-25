@@ -78,7 +78,7 @@ VALIDATION_ERROR_WITH_FIELD_NAME: {
 
     my %error = (
         rule    => 'rule_name',
-        message => 'customer_id rule message',
+        message => 'Customer Id rule message',
     );
 
     my ($error) = $obj->validation_error( rule_name => 'rule message' );

@@ -43,7 +43,7 @@ BEGIN {
 my $class = __PACKAGE__;
 
 my %attributes = (
-    name    => 'off_road_vechicle',
+    name    => 'off_road_vehicle',
     label   => 'Off Road Vehicle',
     roles   => [ qw( steer brake gas four_wheel_drive ) ],
     classes => [ qw( Vehicle Jeep                     ) ],
