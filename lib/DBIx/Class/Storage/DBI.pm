@@ -2162,6 +2162,63 @@ sub sth {
   $self->dbh_do('_dbh_sth', $sql);  # retry over disconnects
 }
 
+=head1 columns_info_for
+
+Keys which may be set include:
+
+=over
+
+=item C<data_type>
+
+=item C<size>
+
+=item C<default_value>
+
+=item C<is_nullable>
+
+=item C<is_unsigned> For numeric types.
+
+=item C<decimal_digits>
+
+=item C<data_set> For list types such as C<enum> and C<set>, contains
+an arrayref of valid values.
+
+=item C<range_min> For numeric types, the minimum valid value.
+
+=item C<range_max> For numeric types, the maximum valid value.
+
+=back
+
+Keys which may be set for various database's features/bugs.
+
+=over
+
+=item C<length_in_bytes> When the C<size> is a length, such as the length of
+a C<text> field, if this value is true, the length should be measured in
+bytes rather than characters.
+
+=item C<ignore_trailing_spaces> When the size is a length, such as the
+length of a C<text> field, if this value is true, trailing spaced should be
+counted.
+
+=item C<decimal_high_positive> For decimal types which, when positive,
+use the byte reserved for the sign to increase the precision by 1.
+
+For Example: The normal range of C<DECIMAL(5,2)> should be C<-999.99> to
+C<999.99>. C<decimal_high_positive> indicates that the valid range of values
+is actually C<-999.99> to C<9999.99>.
+
+=item C<decimal_literal_range> For decimal types which include the sign and
+decimal point in the precision length.
+
+For Example: The normal range of C<DECIMAL(5,2)> should be C<-999.99> to
+C<999.99>. C<decimal_literal_range> indicates that the valid range of values
+is actually C<-9.99> to C<99.99>.
+
+=back
+
+=cut
+
 sub _dbh_columns_info_for {
   my ($self, $dbh, $table) = @_;
 
