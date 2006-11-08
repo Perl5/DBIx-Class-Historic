@@ -1,0 +1,14 @@
+Ash's thoughts on privilege/GRANT abstraction for DBIC
+
+So my first thought was some hideous mismash of lots of functions like:
+->grant($user, $schema, \@privileges)
+
+But DB2 and Oracle both support groups - and its a bit evil
+
+So while driving to badminton I came up with the following "idea".
+
+->grant({ user => $user, object => $table_or_object, privileges => \@privs})
+->grant({ group => $group, ... <as above> })
+->grant({ user=> $user, add_to_group => $group});
+
+Thoughts?
