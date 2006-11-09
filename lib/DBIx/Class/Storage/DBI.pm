@@ -10,6 +10,7 @@ use SQL::Abstract::Limit;
 use DBIx::Class::Storage::DBI::Cursor;
 use DBIx::Class::Storage::Statistics;
 use IO::File;
+use Carp::Clan qw/DBIx::Class/;
 
 __PACKAGE__->mk_group_accessors(
   'simple' =>
@@ -1212,7 +1213,8 @@ sub deploy {
       next if($_ =~ /^COMMIT/m);
       next if $_ =~ /^\s+$/; # skip whitespace only
       $self->debugobj->query_start($_) if $self->debug;
-      $self->dbh->do($_) or warn "SQL was:\n $_"; # XXX exceptions?
+      eval {$self->dbh->do($_) or warn "SQL was:\n $_"}; # XXX exceptions?
+      if ($@) {warn "$@ while executing: $_\n";}
       $self->debugobj->query_end($_) if $self->debug;
     }
   }
@@ -1251,6 +1253,98 @@ sub build_datetime_parser {
   $self->throw_exception("Couldn't load ${type}: $@") if $@;
   return $type;
 }
+
+=head2 pre_grant
+
+Prefrom any necesassry steps before preforming a GRANT operation. C<$args>
+can be altered if needed.
+
+=over 4
+
+=item Arguments: $args
+
+=item Return: true to continue processing grant operation
+
+=back
+
+=cut
+
+sub pre_grant { 1 };
+
+=head2 post_grant
+
+Prefrom any necesassry steps after a GRANT command has been issued. For 
+example mysql will issue "FLUSH PRIVILEGES"
+
+=cut
+
+sub post_grant {};
+
+=head2 grant_statements
+
+=cut
+
+sub grant_statements {
+    my ($self, $args) = @_;
+
+
+    my $entity = $args->{user} || $args->{group} or croak "Unable to get grant entity";
+
+    my $known_privileges = $self->known_privileges;
+    my @privs = grep { $known_privileges->{$_}  } @{$args->{privileges}};
+
+    my $grant = "GRANT " . join(", ", @privs) . " ON $args->{object} TO $entity";
+
+    my ($user, $password) = @{$args}{qw/user password/};
+    return $user && $password ? ($grant, $self->set_user_password($user, $password)) : ($grant);
+}
+
+=head2 grant
+
+Grant privileges to an entity. This function takes a single hash ref 
+containing the following keys
+
+=over 4
+
+=item user
+
+=item group
+
+These specify the entitiy to grant privileges to. If both are specified 
+C<group> will be ignored.
+
+=item object
+
+The (database specific syntax) object to grant privileges on. For example this
+could be a C<database.table> for a MySQL, or a stored function name in Oracle
+to grant execution rights upon.
+
+=item privileges
+
+An array ref of privileges to grant to entity on object. Currently this is
+database specific, and any unknown privileges are silently ignored.
+
+=back
+
+=cut
+
+sub grant {
+    my ($self, $args) = @_;
+
+    return unless $self->pre_grant($args);
+
+    my @stmts = $self->grant_statements($args);
+
+    foreach (@stmts) {
+        $self->dbh->do($_);
+    }
+
+    $self->post_grant($args);
+}
+
+sub current_schema { shift->throw_exception("DBI did not define current_schema"); }
+
+sub known_privileges { {} };
 
 sub DESTROY {
   my $self = shift;
