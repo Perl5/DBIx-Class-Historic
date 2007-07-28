@@ -852,15 +852,6 @@ sub __set {
         return ( $ret ) if not ( $ret );
     }
 
-    # The blob handling will destroy $args{'value'}. But we assign
-    # that back to the object at the end. this works around that
-    my $unmunged_value = $args{'value'};
-
-    if ( $column->type =~ /^(text|longtext|clob|blob|lob|bytea)$/i ) {
-        my $bhash = $self->_handle->blob_params( $column->name, $column->type );
-        $bhash->{'value'} = $args{'value'};
-        $args{'value'} = $bhash;
-    }
 
     my $val = $self->_handle->update_record_value(
         %args,
