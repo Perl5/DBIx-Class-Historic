@@ -1169,10 +1169,13 @@ sub __create {
                 'Jifty::DBI::Record' );
         }
 
+        warn "Before running fitlers my value is ".$attribs{$column_name};
         $self->_apply_input_filters(
             column    => $column,
             value_ref => \$attribs{$column_name},
         );
+
+        warn "After running fitlers my value is ".$attribs{$column_name};
 
         # Implement 'is distinct' checking
         if ( $column->distinct ) {
@@ -1372,6 +1375,7 @@ sub _apply_filters {
         @_
     );
 
+
     my @filters = $self->_filters(%args);
     my $action = $args{'direction'} eq 'output' ? 'decode' : 'encode';
     foreach my $filter_class (@filters) {
@@ -1379,7 +1383,7 @@ sub _apply_filters {
         $filter_class->require() unless $INC{ join('/', split(/::/,$filter_class)).".pm" };
 
         if ($UNIVERSAL::require::ERROR) {
-            die $UNIVERSAL::require::ERROR;
+            warn $UNIVERSAL::require::ERROR;
             next;
         }
         my $filter = $filter_class->new(

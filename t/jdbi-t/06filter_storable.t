@@ -45,6 +45,8 @@ SKIP: {
    ok($id, 'created record');
    ok($rec->load($id), 'loaded record');
    is($rec->id, $id, 'record id matches');
+
+   warn $rec->__value('my_data');
    is(ref $rec->my_data, 'HASH', 'my_data is a HASH');
    is_deeply($rec->my_data, $complex_data, 'my_data matches initial data');
 

@@ -4,7 +4,7 @@ use DBIx::Class::JDBICompat;
 use strict;
 use warnings;
 
-use Test::More tests => 2;
+use Test::More skip_all => "This was a test of Jifty::DBI internals that is no longer relevant"; #tests => 2;
 
 my $package;
 BEGIN {

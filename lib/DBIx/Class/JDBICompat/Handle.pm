@@ -328,7 +328,7 @@ Takes a table name and a set of key-value pairs in an array. splits the key valu
 
 sub insert {
     my ( $self, $table, @attrs ) = @_;
-    my %to_insert = @attrs;
+    my %to_insert = (@attrs);
     my $source = $self->schema->source($table);
     my $storage = $self->schema->storage;
     eval { 

@@ -24,7 +24,7 @@ BEGIN {
   use_ok("Jifty::DBI::Handle");
 }
 
-require_ok("t/testmodels.pl");
+require_ok("t/jdbi-t/testmodels.pl");
 
 foreach my $d ( @available_drivers ) {
   SKIP: {

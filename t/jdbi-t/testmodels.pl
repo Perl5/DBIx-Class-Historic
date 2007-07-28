@@ -81,6 +81,18 @@ sub schema_sqlite {
     }
 }
 
+sub schema_sqlite_024 {
+    return q{
+    CREATE TABLE addresses (
+     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL  ,
+     employee_id integer   ,
+     name varchar  DEFAULT 'Frank' ,
+     phone varchar ,
+     street varchar
+    ) ;
+    }
+}
+
 sub schema_pg {
     return q{
     CREATE TABLE addresses ( 
@@ -88,6 +100,19 @@ sub schema_pg {
       employee_id integer  ,
       name varchar DEFAULT 'Frank' ,
       phone varchar ,
+      PRIMARY KEY (id)
+    ) ;
+    };
+}
+
+sub schema_pg_024 {
+    return q{
+    CREATE TABLE addresses ( 
+      id serial NOT NULL , 
+      employee_id integer  ,
+      name varchar DEFAULT 'Frank' ,
+      phone varchar ,
+      street varchar ,
       PRIMARY KEY (id)
     ) ;
     };
