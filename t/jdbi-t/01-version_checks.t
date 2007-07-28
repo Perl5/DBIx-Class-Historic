@@ -11,6 +11,8 @@ use ExtUtils::MakeMaker;
 use ExtUtils::Manifest qw(maniread);
 use_ok('Jifty::DBI');
 
+exit 0 unless (-e 'MANIFEST');
+
 my $minfo = maniread();
 ok($minfo) or die;
 
