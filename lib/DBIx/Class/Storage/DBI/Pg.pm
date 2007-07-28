@@ -34,6 +34,8 @@ sub _dbh_get_autoinc_seq {
     my $info = $dbh->column_info(undef,$schema,$table,$col)->fetchrow_hashref;
     if(defined $info->{COLUMN_DEF} and
        $info->{COLUMN_DEF} =~ /^nextval\(+'([^']+)'::(?:text|regclass)\)/) {
+        # XXX TODO if this doesn't work, check the slightly different regex in Jifty::DBI::Handle::Pg
+        # to catch possible different quoting
       my $seq = $1;
       # may need to strip quotes -- see if this works
       return $seq =~ /\./ ? $seq : $info->{TABLE_SCHEM} . "." . $seq;
@@ -88,7 +90,15 @@ DBIx::Class::Storage::DBI::Pg - Automatic primary key class for PostgreSQL
 
 =head1 DESCRIPTION
 
-This class implements autoincrements for PostgreSQL.
+This class implements a custom database profile for PostgreSQL, including
+
+=over
+
+=item autoincrement support
+
+=item bind attribute handling (for blobs)
+
+=item a pointer to the correct date parser
 
 =head1 AUTHORS
 
