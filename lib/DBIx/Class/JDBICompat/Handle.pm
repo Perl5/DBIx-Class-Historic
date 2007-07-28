@@ -338,7 +338,7 @@ sub insert {
         warn $@;
         return undef;
     }
-    return $storage->last_insert_id;
+    return $storage->last_insert_id($source, 'id'); # XXX TODO. HARDCODED THE ID. CAN WE NOT GET THIS FROM THE $source?
 }
 
 =head2 update_record_value 
