@@ -10,6 +10,7 @@ our $VERSION = '1.99_01';
 BEGIN {
     for my $subclass (
         qw(Class/Trigger HasFilters Filter Column Handle Record Collection SchemaGenerator Schema),
+        (map {"Record/$_"} qw(Cachable Memcached Plugin)),
         (map {"Handle/$_"} qw(Pg SQLite mysql)),
         (map {"Filter/$_"} qw(DateTime Date SaltHash Storable Time Truncate YAML base64 utf8))
     ) {
