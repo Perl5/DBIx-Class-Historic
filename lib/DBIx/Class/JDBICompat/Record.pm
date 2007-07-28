@@ -7,9 +7,10 @@ use Class::ReturnValue  ();
 use Lingua::EN::Inflect ();
 use Jifty::DBI::Column  ();
 use UNIVERSAL::require  ();
+use DBIx::Class::ResultSource::Table ();
 use Scalar::Util      qw(blessed);
 use Jifty::DBI::Class::Trigger; # exports by default
-
+use Scalar::Defer ();
 
 use base qw/
     Class::Data::Inheritable
@@ -19,10 +20,25 @@ use base qw/
 our $VERSION = '0.01';
 
 Jifty::DBI::Record->mk_classdata(qw/COLUMNS/);
+Jifty::DBI::Record->mk_classdata(qw/_RESULT_SOURCE/);
 Jifty::DBI::Record->mk_classdata(qw/TABLE_NAME/ );
 Jifty::DBI::Record->mk_classdata(qw/_READABLE_COLS_CACHE/);
 Jifty::DBI::Record->mk_classdata(qw/_WRITABLE_COLS_CACHE/);
 Jifty::DBI::Record->mk_classdata(qw/_COLUMNS_CACHE/ );
+
+sub RESULT_SOURCE {
+    my $self = shift;
+    unless ($self->_RESULT_SOURCE) {
+      my $class = ref($self) || $self;
+      my $source = DBIx::Class::ResultSource::Table->new;
+      $source->result_class($class);
+      $source->name($class->table);
+      my $schema = DBIx::Class::JDBICompat->global_schema;
+      $schema->register_source($class->table => $source);
+      $self->_RESULT_SOURCE($schema->source($class));
+    }
+    $self->_RESULT_SOURCE;
+}
 
 =head1 NAME
 
@@ -183,8 +199,14 @@ sub _init_columns {
     return if defined $self->COLUMNS;
 
     $self->COLUMNS( {} );
+    my $source = $self->RESULT_SOURCE;
 
-    foreach my $column_name ( @{ $self->_primary_keys } ) {
+    my @pri = @{$self->_primary_keys};
+
+    $source->add_columns(@pri);
+    $source->set_primary_key(@pri);
+
+    foreach my $column_name ( @pri ) {
         my $column = $self->add_column($column_name);
         $column->writable(0);
         $column->readable(1);
@@ -193,6 +215,9 @@ sub _init_columns {
 
         $self->_init_methods_for_column($column);
     }
+
+
+    
 
 }
 
@@ -426,9 +451,11 @@ sub add_column {
     my $self = shift;
     my $name = shift;
     $name = lc $name;
-    
-    $self->COLUMNS->{$name} = Jifty::DBI::Column->new()
-    unless exists $self->COLUMNS->{$name};
+   
+    unless (exists $self->COLUMNS->{$name}) {
+    $self->RESULT_SOURCE->add_column($name); # naive, no column metadata stored yet
+    $self->COLUMNS->{$name} = Jifty::DBI::Column->new();
+    }
     $self->_READABLE_COLS_CACHE(undef);
     $self->_WRITABLE_COLS_CACHE(undef);
     $self->_COLUMNS_CACHE(undef );
@@ -1349,11 +1376,10 @@ sub _apply_filters {
     my $action = $args{'direction'} eq 'output' ? 'decode' : 'encode';
     foreach my $filter_class (@filters) {
         local $UNIVERSAL::require::ERROR;
-        $filter_class->require() unless 
-         $INC{ join('/', split(/::/,$filter_class)).".pm" };
+        $filter_class->require() unless $INC{ join('/', split(/::/,$filter_class)).".pm" };
 
         if ($UNIVERSAL::require::ERROR) {
-            warn $UNIVERSAL::require::ERROR;
+            die $UNIVERSAL::require::ERROR;
             next;
         }
         my $filter = $filter_class->new(

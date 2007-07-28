@@ -13,13 +13,8 @@ Array of all supported DBD drivers.
 
 our @supported_drivers = qw(
         SQLite
-        Informix
         mysql
-        mysqlPP
-        ODBC
-        Oracle
         Pg
-        Sybase
 );
 
 =head2 @available_drivers
@@ -222,17 +217,6 @@ sub has_schema
                 $method = '' unless UNIVERSAL::can( $class, $method );
                 return $method;
         } else {
-                my $ver = $driver->database_version;
-                return has_schema( $class, handle_to_driver( $driver ) ) unless $ver;
-
-                my $method = 'schema_'. lc handle_to_driver( $driver );
-                $ver =~ s/-.*$//;
-                my @nums = grep $_, map { int($_) } split /\./, $ver;
-                while( @nums ) {
-                        my $m = $method ."_". join '_', @nums;
-                        return $m if( UNIVERSAL::can( $class, $m ) );
-                        pop @nums;
-                }
                 return has_schema( $class, handle_to_driver( $driver ) );
         }
 }

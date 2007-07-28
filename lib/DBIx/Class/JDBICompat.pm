@@ -1,8 +1,28 @@
-package Jifty::DBI;
 use warnings;
 use strict;
 
-$Jifty::DBI::VERSION = '0.42';
+package DBIx::Class::JDBICompat;
+
+use DBIx::Class::Schema;
+
+our $VERSION = '1.99_01';
+
+BEGIN {
+    for my $subclass (
+        qw(Class/Trigger HasFilters Filter Column Handle Record Collection SchemaGenerator Schema),
+        (map {"Handle/$_"} qw(Pg SQLite mysql)),
+        (map {"Filter/$_"} qw(DateTime Date SaltHash Storable Time Truncate YAML base64 utf8))
+    ) {
+        require "DBIx/Class/JDBICompat/${subclass}.pm";
+        $INC{"Jifty/DBI/${subclass}.pm"} = __FILE__;
+    }
+    $INC{"Jifty/DBI.pm"} = __FILE__;
+}
+
+{
+    my $schema = DBIx::Class::Schema->clone;
+    sub global_schema { $schema; }
+}
 
 =head1 NAME
 

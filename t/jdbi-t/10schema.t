@@ -9,7 +9,7 @@ use constant TESTS_PER_DRIVER => 48;
 our @available_drivers;
 
 BEGIN {
-  require("t/utils.pl");
+  require("t/jdbi-t/utils.pl");
   my $total = 3 + scalar(@available_drivers) * TESTS_PER_DRIVER;
   if( not eval { require DBIx::DBSchema } ) {
     plan skip_all => "DBIx::DBSchema not installed";

@@ -4,10 +4,11 @@ use Carp               ();
 use DBI                ();
 use Class::ReturnValue ();
 use Encode             ();
+use DBIx::Class::Storage::DBI;
 
 use base qw/Jifty::DBI::HasFilters/;
 
-use vars qw(%DBIHandle $PrevHandle $DEBUG $TRANSDEPTH);
+use vars qw($DEBUG $TRANSDEPTH);
 
 $TRANSDEPTH = 0;
 
@@ -88,60 +89,15 @@ sub connect {
         @_
     );
 
-    if ( $args{'driver'}
-        && !$self->isa( 'Jifty::DBI::Handle::' . $args{'driver'} ) )
-    {
-        if ( $self->_upgrade_handle( $args{'driver'} ) ) {
-            return ( $self->connect(%args) );
-        }
-    }
-
-    my $dsn = $self->dsn || '';
-
-# Setting this actually breaks old RT versions in subtle ways. So we need to explicitly call it
+    # Setting this actually breaks old RT versions in subtle ways. So we need to explicitly call it
 
     $self->build_dsn(%args);
+    my $dsn = $self->dsn || '';
 
-    # Only connect if we're not connected to this source already
-    if ( ( !$self->dbh ) || ( !$self->dbh->ping ) || ( $self->dsn ne $dsn ) )
-    {
-        my $handle
-            = DBI->connect( $self->dsn, $args{'user'}, $args{'password'} )
-            || Carp::croak "Connect Failed $DBI::errstr\n";
+    my $schema = DBIx::Class::JDBICompat->global_schema->connect($dsn, $args{'user'},$args{'password'});
+    # $schema->storage->ensure_connected; # we can lazy connect.. or can we?
+    $self->schema($schema);
 
-#databases do case conversion on the name of columns returned.
-#actually, some databases just ignore case. this smashes it to something consistent
-        $handle->{FetchHashKeyName} = 'NAME_lc';
-
-        #Set the handle
-        $self->dbh($handle);
-
-        return (1);
-    }
-
-    return (undef);
-
-}
-
-=head2 _upgrade_handle DRIVER
-
-This private internal method turns a plain Jifty::DBI::Handle into one
-of the standard driver-specific subclasses.
-
-=cut
-
-sub _upgrade_handle {
-    my $self = shift;
-
-    my $driver = shift;
-    my $class  = 'Jifty::DBI::Handle::' . $driver;
-
-    local $@;
-    eval "require $class";
-    return if $@;
-
-    bless $self, $class;
-    return 1;
 }
 
 =head2 build_dsn PARAMHASH
@@ -326,35 +282,43 @@ Return the current DBI handle. If we're handed a parameter, make the database ha
 
 =cut
 
+sub schema {
+    my $self = shift;
+    $self->{'dbic_schema'} = shift if (@_);
+    return $self->{'dbic_schema'}
+}
+
 sub dbh {
     my $self = shift;
-
-    #If we are setting the database handle, set it.
-    $DBIHandle{$self} = $PrevHandle = shift if (@_);
-
-    return ( $DBIHandle{$self} ||= $PrevHandle );
+    my $storage = $self->schema->storage();
+    return $storage->dbh;
 }
+
+
 
 =head2 delete $table_NAME @KEY_VALUE_PAIRS
 
-Takes a table name and a set of key-value pairs in an array. splits the key value pairs, constructs an DELETE statement and performs the delete. Returns the row_id of this row.
+Takes a table name and a set of key-value pairs in an array. splits the key value pairs, constructs an DELETE statement and performs the delete.
 
 =cut
 
 sub delete {
-    my ( $self, $table, @pairs ) = @_;
-
-    my @bind  = ();
-    my $where = 'WHERE ';
-    while (my $key = shift @pairs) {
-        $where .= $key . "=?" . " AND ";
-        push( @bind, shift(@pairs) );
+    my ( $self, $table, @attrs ) = @_;
+    my %to_delete = @attrs;
+    my $source = $self->schema->source($table);
+    my $storage = $self->schema->storage;
+    eval { 
+        $storage->delete($source, \%to_delete); # XXX TODO may throw an exception
+    };
+    if ($@) {
+        warn $@;
+        return undef;
     }
-
-    $where =~ s/AND $//;
-    my $query_string = "DELETE FROM " . $table . ' ' . $where;
-    $self->simple_query( $query_string, @bind );
+    return 1;
+    
 }
+
+
 
 =head2 insert $table_NAME @KEY_VALUE_PAIRS
 
@@ -363,26 +327,18 @@ Takes a table name and a set of key-value pairs in an array. splits the key valu
 =cut
 
 sub insert {
-    my ( $self, $table, @pairs ) = @_;
-    my ( @cols, @vals,  @bind );
-
-#my %seen; #only the *first* value is used - allows drivers to specify default
-    while ( my $key = shift @pairs ) {
-        my $value = shift @pairs;
-
-        # next if $seen{$key}++;
-        push @cols, $key;
-        push @vals, '?';
-        push @bind, $value;
+    my ( $self, $table, @attrs ) = @_;
+    my %to_insert = @attrs;
+    my $source = $self->schema->source($table);
+    my $storage = $self->schema->storage;
+    eval { 
+        $storage->insert($source, \%to_insert); # XXX TODO may throw an exception
+    };
+    if ($@) {
+        warn $@;
+        return undef;
     }
-
-    my $query_string = "INSERT INTO $table ("
-        . CORE::join( ", ", @cols )
-        . ") VALUES " . "("
-        . CORE::join( ", ", @vals ) . ")";
-
-    my $sth = $self->simple_query( $query_string, @bind );
-    return ($sth);
+    return $storage->last_insert_id;
 }
 
 =head2 update_record_value 
@@ -404,33 +360,26 @@ sub update_record_value {
         column          => undef,
         is_sql_function => undef,
         primary_keys    => undef,
+        value           => undef,
         @_
     );
 
+
     return 1 unless grep {defined} values %{$args{primary_keys}};
 
-    my @bind  = ();
-    my $query = 'UPDATE ' . $args{'table'} . ' ';
-    $query .= 'SET ' . $args{'column'} . '=';
+    my $to_set = { $args{'column'} => ($args{'is_sql_function'} ? \$args{'value'} : $args{'value'}) };
 
-    ## Look and see if the column is being updated via a SQL function.
-    if ( $args{'is_sql_function'} ) {
-        $query .= $args{'value'} . ' ';
-    } else {
-        $query .= '? ';
-        push( @bind, $args{'value'} );
+    eval {
+        $self->schema->storage->update(
+            $self->schema->source($args{'table'}),
+            $to_set, $args{'primary_keys'}
+        );
+    };
+    if ($@) {
+        warn $@;
+        return undef;
     }
-
-    ## Constructs the where clause.
-    my $where = 'WHERE ';
-    foreach my $key ( keys %{ $args{'primary_keys'} } ) {
-        $where .= $key . "=?" . " AND ";
-        push( @bind, $args{'primary_keys'}{$key} );
-    }
-    $where =~ s/AND\s$//;
-
-    my $query_str = $query . $where;
-    return ( $self->simple_query( $query_str, @bind ) );
+    return 1;
 }
 
 =head2 update_table_value table COLUMN NEW_value RECORD_ID IS_SQL
@@ -466,8 +415,11 @@ sub simple_query {
     my $query_string = shift;
     my @bind_values;
     @bind_values = (@_) if (@_);
+    my $sth;
+    eval {
 
-    my $sth = $self->dbh->prepare($query_string);
+   $sth = $self->dbh->prepare($query_string);
+    };
     unless ($sth) {
         if ($DEBUG) {
             die "$self couldn't prepare the query '$query_string'"
@@ -594,6 +546,8 @@ The base implementation uses a C<SELECT VERSION()>
 sub database_version {
     my $self = shift;
     my %args = ( short => 1, @_ );
+
+    die "database_version not currently implemented";
 
     unless ( defined $self->{'database_version'} ) {
 
@@ -1196,19 +1150,6 @@ sub log {
     my $msg  = shift;
     warn $msg . "\n";
 
-}
-
-=head2 DESTROY
-
-When we get rid of the L<Jifty::DBI::Handle>, we need to disconnect
-from the database
-
-=cut
-
-sub DESTROY {
-    my $self = shift;
-    $self->disconnect;
-    delete $DBIHandle{$self};
 }
 
 1;

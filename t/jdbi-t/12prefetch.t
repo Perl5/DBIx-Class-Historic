@@ -6,7 +6,7 @@ use warnings;
 use File::Spec;
 use Test::More;
 
-BEGIN { require "t/utils.pl" }
+BEGIN { require "t/jdbi-t/utils.pl" }
 our (@available_drivers);
 use constant TESTS_PER_DRIVER => 41;
 

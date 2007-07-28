@@ -101,16 +101,18 @@ To use your model plugin, just use the mixins you want to get columns from. You 
 =cut
 
 sub import {
-    my $self = shift;
+    my $self   = shift;
     my $caller = caller;
-    for ($self->columns) {
-            $caller->COLUMNS->{$_->name} = $_ ;
-            $caller->_init_methods_for_column($_);
+    for ( $self->columns ) {
+        $caller->RESULT_SOURCE->add_column( $_->name )
+            ; # XXX TODO, should get refactored to share code with ::Record->add_columnj
+        $caller->COLUMNS->{ $_->name } = $_;
+        $caller->_init_methods_for_column($_);
     }
-    $self->export_to_level(1,undef);
-    
-    if (my $triggers =  $self->can('register_triggers') ) {
-        $triggers->($caller)
+    $self->export_to_level( 1, undef );
+
+    if ( my $triggers = $self->can('register_triggers') ) {
+        $triggers->($caller);
     }
 }
 

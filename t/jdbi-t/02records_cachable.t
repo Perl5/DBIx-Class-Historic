@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use File::Spec;
 use Test::More;
-BEGIN { require "t/utils.pl" }
+BEGIN { require "t/jdbi-t/utils.pl" }
 
 use constant TESTS_PER_DRIVER => 35;
 

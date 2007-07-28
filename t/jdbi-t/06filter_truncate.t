@@ -3,7 +3,7 @@
 use strict;
 
 use Test::More;
-BEGIN { require "t/utils.pl" }
+BEGIN { require "t/jdbi-t/utils.pl" }
 our (@available_drivers);
 
 use constant TESTS_PER_DRIVER => 15;
@@ -101,18 +101,6 @@ EOF
 
 }
 
-sub schema_mysql_4_1 {
-
-<<EOF;
-CREATE TEMPORARY table users (
-        id integer auto_increment primary key,
-        login binary(5),
-        name varbinary(10),
-        disabled int(4) default 0
-)
-EOF
-
-}
 
 # XXX: Pg adds trailing spaces to CHAR columns
 # when other don't, must be fixed for consistency

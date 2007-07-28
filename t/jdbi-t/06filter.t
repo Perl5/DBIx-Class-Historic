@@ -3,7 +3,7 @@
 use strict;
 
 use Test::More;
-BEGIN { require "t/utils.pl" }
+BEGIN { require "t/jdbi-t/utils.pl" }
 plan tests => 6;
 # test for Jifty::DBI::Filter class only
 # create new t/06filter_*.t files for specific filters

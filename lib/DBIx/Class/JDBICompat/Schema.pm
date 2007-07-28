@@ -367,6 +367,8 @@ sub _init_column_for {
     }
 
     $from->COLUMNS->{$name} = $column;
+    $from->RESULT_SOURCE->add_column($name); # XXX TODO, should get refactored to share code with ::Record->add_columnj
+
 
     # Heuristics: If we are called through Jifty::DBI::Schema, 
     # then we know that we are going to initialize methods later
