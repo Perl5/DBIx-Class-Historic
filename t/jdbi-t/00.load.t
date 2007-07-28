@@ -1,3 +1,4 @@
+use DBIx::Class::JDBICompat;
 use Test::More tests => 13;
 
 BEGIN { use_ok("Jifty::DBI::Collection"); }

@@ -1,3 +1,4 @@
+use DBIx::Class::JDBICompat;
 #!/usr/bin/env perl
 use strict;
 use warnings;

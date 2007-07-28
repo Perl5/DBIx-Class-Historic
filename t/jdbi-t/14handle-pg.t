@@ -1,3 +1,4 @@
+use DBIx::Class::JDBICompat;
 # Test methods in Jifty::DBI::Handle::Pg
 
 use strict;
