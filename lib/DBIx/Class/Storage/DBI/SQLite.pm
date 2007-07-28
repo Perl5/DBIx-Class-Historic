@@ -60,7 +60,7 @@ DBIx::Class::PK::Auto::SQLite - Automatic primary key class for SQLite
 
 =head1 DESCRIPTION
 
-This class implements autoincrements for SQLite.
+This class implements a custom database profile for SQLite.
 
 =head1 AUTHORS
 

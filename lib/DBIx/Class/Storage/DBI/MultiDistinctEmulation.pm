@@ -38,7 +38,8 @@ DBIx::Class::Storage::DBI::MultiDistinctEmulation - Some databases can't handle 
 
 =head1 DESCRIPTION
 
-This class allows count distincts with multiple columns for retarded databases (Oracle and SQLite)
+This class allows count distincts with multiple columns for databases without native support for them.
+(Oracle and SQLite)
 
 =head1 AUTHORS
 
