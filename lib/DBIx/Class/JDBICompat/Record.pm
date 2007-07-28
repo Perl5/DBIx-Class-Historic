@@ -1111,7 +1111,7 @@ true or false value. If it returns false, the create is aborted.
 
 This method is called after attempting to insert the record into the
 database. It gets handed a reference to the return value of the
-insert. That'll either be a true value or a L<Class::ReturnValue>
+insert. That will either be a true value or a L<Class::ReturnValue>
 
 =back
 
@@ -1136,8 +1136,7 @@ sub create {
 
     my $ret = $self->__create(%attribs);
 
-    $ok = $self->_run_callback( name => "after_create",
-                           args => \$ret);
+    $ok = $self->_run_callback( name => "after_create", args => \$ret);
     return $ok if (not defined $ok);
     
     if ($class) {
@@ -1169,13 +1168,11 @@ sub __create {
                 'Jifty::DBI::Record' );
         }
 
-        warn "Before running fitlers my value is ".$attribs{$column_name};
         $self->_apply_input_filters(
             column    => $column,
             value_ref => \$attribs{$column_name},
         );
 
-        warn "After running fitlers my value is ".$attribs{$column_name};
 
         # Implement 'is distinct' checking
         if ( $column->distinct ) {
@@ -1186,11 +1183,6 @@ sub __create {
             }
         }
 
-        if ( $column->type =~ /^(text|longtext|clob|blob|lob|bytea)$/i ) {
-            my $bhash = $self->_handle->blob_params( $column_name, $column->type );
-            $bhash->{'value'} = $attribs{$column_name};
-            $attribs{$column_name} = $bhash;
-        }
     }
 
     for my $column ($self->columns) {
