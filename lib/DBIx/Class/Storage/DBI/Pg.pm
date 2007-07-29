@@ -100,6 +100,8 @@ This class implements a custom database profile for PostgreSQL, including
 
 =item a pointer to the correct date parser
 
+=back
+
 =head1 AUTHORS
 
 Marcus Ramberg <m.ramberg@cpan.org>
