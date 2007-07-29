@@ -338,7 +338,12 @@ sub insert {
         warn $@;
         return undef;
     }
-    return $storage->last_insert_id($source, 'id'); # XXX TODO. HARDCODED THE ID. CAN WE NOT GET THIS FROM THE $source?
+    return $storage->last_insert_id($source, 'id'); # XXX TODO. HARDCODED THE ID. SEE BELOW.
+    # we can get this from the source, but you'll end up re-implementing the
+    # logic currently embedded in Row's insert method. Factoring this out would
+    # probably be ok, but I figure we'll probably move Record over to using
+    # the Row code or something before that so fine for now? (maybe post-09
+    # when this stuff is encapulated in source entirely is good?)
 }
 
 =head2 update_record_value 
