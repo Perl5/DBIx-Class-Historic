@@ -879,7 +879,7 @@ sub __set {
         # XXX TODO primary_keys
         $self->load_by_cols( id => $self->id );
     } else {
-        $self->{'values'}{ $column->name } = $unmunged_value;
+        $self->{'values'}{ $column->name } = $args{'value'};
         $self->{'decoded'}{ $column->name } = 0;
     }
     $ret->as_array( 1, "The new value has been set." );
