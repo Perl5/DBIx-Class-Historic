@@ -269,11 +269,7 @@ disconnect from your DBI datasource
 
 sub disconnect {
     my $self = shift;
-    if ( $self->dbh ) {
-        return ( $self->dbh->disconnect() );
-    } else {
-        return;
-    }
+    $self->schema->storage->disconnect;
 }
 
 =head2 dbh [HANDLE]
@@ -667,7 +663,7 @@ sub rollback {
     $self->schema->storage->txn_rollback;
 
     if ($force) {
-        while ($self->schema->storage->transcation_depth) {
+        while ($self->schema->storage->transaction_depth) {
             $self->schema->storage->txn_rollback;
         }
     }
@@ -693,7 +689,7 @@ Return the current depth of the faked nested transaction stack.
 
 sub transaction_depth {
     my $self = shift;
-    return $self->schema->storage->tansaction_depth;
+    return $self->schema->storage->transaction_depth;
 }
 
 =head2 apply_limits STATEMENTREF ROWS_PER_PAGE FIRST_ROW
