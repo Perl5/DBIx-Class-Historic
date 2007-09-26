@@ -636,13 +636,7 @@ Emulates nested transactions, by keeping a transaction stack depth.
 =cut
 
 sub begin_transaction {
-    my $self = shift;
-    $TRANSDEPTH++;
-    if ( $TRANSDEPTH > 1 ) {
-        return ($TRANSDEPTH);
-    } else {
-        return ( $self->dbh->begin_work );
-    }
+    shift->schema->stroage->txn_begin;
 }
 
 =head2 commit
@@ -653,18 +647,7 @@ This will turn Autocommit mode back on.
 =cut
 
 sub commit {
-    my $self = shift;
-    unless ($TRANSDEPTH) {
-        Carp::confess(
-            "Attempted to commit a transaction with none in progress");
-    }
-    $TRANSDEPTH--;
-
-    if ( $TRANSDEPTH == 0 ) {
-        return ( $self->dbh->commit );
-    } else {    #we're inside a transaction
-        return ($TRANSDEPTH);
-    }
+    shift->schema->storage->txn_commit;
 }
 
 =head2 rollback [FORCE]
@@ -677,26 +660,16 @@ If this method is passed a true argument, stack depth is blown away and the oute
 =cut
 
 sub rollback {
+
     my $self  = shift;
     my $force = shift;
+ 
+    $self->schema->storage->txn_rollback;
 
-    my $dbh = $self->dbh;
-    unless ($dbh) {
-        $TRANSDEPTH = 0;
-        return;
-    }
-
-#unless ($TRANSDEPTH) {Carp::confess("Attempted to rollback a transaction with none in progress")};
     if ($force) {
-        $TRANSDEPTH = 0;
-        return ( $dbh->rollback );
-    }
-
-    $TRANSDEPTH-- if ( $TRANSDEPTH >= 1 );
-    if ( $TRANSDEPTH == 0 ) {
-        return ( $dbh->rollback );
-    } else {    #we're inside a transaction
-        return ($TRANSDEPTH);
+        while ($self->schema->storage->transcation_depth) {
+            $self->schema->storage->txn_rollback;
+        }
     }
 
 }
@@ -720,7 +693,7 @@ Return the current depth of the faked nested transaction stack.
 
 sub transaction_depth {
     my $self = shift;
-    return ($TRANSDEPTH);
+    return $self->schema->storage->tansaction_depth;
 }
 
 =head2 apply_limits STATEMENTREF ROWS_PER_PAGE FIRST_ROW
