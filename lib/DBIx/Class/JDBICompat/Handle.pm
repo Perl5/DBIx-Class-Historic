@@ -632,7 +632,7 @@ Emulates nested transactions, by keeping a transaction stack depth.
 =cut
 
 sub begin_transaction {
-    shift->schema->stroage->txn_begin;
+    shift->schema->storage->txn_begin;
 }
 
 =head2 commit
