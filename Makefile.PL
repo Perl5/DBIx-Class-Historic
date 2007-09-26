@@ -31,8 +31,16 @@ tests "t/*.t t/*/*.t";
 
 # re-build README and require CDBI modules for testing if we're in a checkout
 if( -e 'inc/.author' ) {
+
+  # CDBICompat
   build_requires 'DBIx::ContextualFetch';
   build_requires 'Class::Trigger';
+
+  # JDBICompat
+  build_requires 'Scalar::Defer';
+  build_requires 'Object::Declare';
+  build_requires 'Cache::Memcached';
+
   system('pod2text lib/DBIx/Class.pm > README');
 }
 
