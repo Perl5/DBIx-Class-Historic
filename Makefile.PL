@@ -40,6 +40,7 @@ if( -e 'inc/.author' ) {
   build_requires 'Scalar::Defer';
   build_requires 'Object::Declare';
   build_requires 'Cache::Memcached';
+  build_requires 'DBIx::DBSchema' => 0.34;
 
   system('pod2text lib/DBIx/Class.pm > README');
 }
