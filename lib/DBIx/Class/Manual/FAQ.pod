@@ -259,7 +259,7 @@ L<Cookbook|DBIx::Class::Manual::Cookbook> for details.
 
 In your table schema class, create a "private" column accessor with:
 
-  __PACKAGE__->add_columns(my_common => { accessor => '_hidden_my_column' });
+  __PACKAGE__->add_columns(my_column => { accessor => '_hidden_my_column' });
 
 Then, in the same class, implement a subroutine called "my_column" that
 fetches the real value and does the formatting you want.
@@ -284,6 +284,18 @@ These two calls can be combined into a single statement:
 Why slice instead of L<DBIx::Class::ResultSet/first> or L<DBIx::Class::ResultSet/single>?
 If supported by the database, slice will use LIMIT/OFFSET to hint to the database that we
 really only need one row. This can result in a significant speed improvement.
+
+=item .. refresh a row from storage?
+
+Use L<DBIx::Class::PK/discard_changes>.
+
+  $row->discard_changes
+
+Discarding changes and refreshing from storage are two sides fo the same coin.  When you
+want to discard your local changes, just re-fetch the row from storage.  When you want
+to get a new, fresh copy of the row, just re-fetch the row from storage.
+L<DBIx::Class::PK/discard_changes> does just that by re-fetching the row from storage
+using the row's primary key.
 
 =back
 
@@ -398,6 +410,6 @@ you ask the resultset for an actual row object.
 particular column or group of columns (a-la cdbi Stringfy column
 group, or stringify_self method) ?
 
-See L<Cookbook/Stringification>
+See L<DBIx::Class::Manual::Cookbook/Stringification>
 
 =back

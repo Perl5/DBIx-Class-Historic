@@ -13,9 +13,11 @@ use Scalar::Util qw/blessed weaken/;
 
 __PACKAGE__->mk_group_accessors('simple' =>
     qw/_connect_info _dbi_connect_info _dbh _sql_maker _sql_maker_opts
-       _conn_pid _conn_tid disable_sth_caching cursor on_connect_do
-       transaction_depth unsafe _dbh_autocommit/
+       _conn_pid _conn_tid disable_sth_caching on_connect_do
+       on_disconnect_do transaction_depth unsafe _dbh_autocommit/
 );
+
+__PACKAGE__->cursor_class('DBIx::Class::Storage::DBI::Cursor');
 
 BEGIN {
 
@@ -311,7 +313,6 @@ documents DBI-specific methods and behaviors.
 sub new {
   my $new = shift->next::method(@_);
 
-  $new->cursor("DBIx::Class::Storage::DBI::Cursor");
   $new->transaction_depth(0);
   $new->_sql_maker_opts({});
   $new->{_in_dbh_do} = 0;
@@ -346,9 +347,30 @@ connection-specific options:
 
 =item on_connect_do
 
-This can be set to an arrayref of literal sql statements, which will
-be executed immediately after making the connection to the database
-every time we [re-]connect.
+Specifies things to do immediately after connecting or re-connecting to
+the database.  Its value may contain:
+
+=over
+
+=item an array reference
+
+This contains SQL statements to execute in order.  Each element contains
+a string or a code reference that returns a string.
+
+=item a code reference
+
+This contains some code to execute.  Unlike code references within an
+array reference, its return value is ignored.
+
+=back
+
+=item on_disconnect_do
+
+Takes arguments in the same form as L<on_connect_do> and executes them
+immediately before disconnecting from the database.
+
+Note, this only runs if you explicitly call L<disconnect> on the
+storage object.
 
 =item disable_sth_caching
 
@@ -480,7 +502,10 @@ sub connect_info {
   my $last_info = $dbi_info->[-1];
   if(ref $last_info eq 'HASH') {
     $last_info = { %$last_info }; # so delete is non-destructive
-    for my $storage_opt (qw/on_connect_do disable_sth_caching unsafe/) {
+    my @storage_option = qw(
+      on_connect_do on_disconnect_do disable_sth_caching unsafe cursor_class
+    );
+    for my $storage_opt (@storage_option) {
       if(my $value = delete $last_info->{$storage_opt}) {
         $self->$storage_opt($value);
       }
@@ -647,6 +672,9 @@ sub disconnect {
   my ($self) = @_;
 
   if( $self->connected ) {
+    my $connection_do = $self->on_disconnect_do;
+    $self->_do_connection_actions($connection_do) if ref($connection_do);
+
     $self->_dbh->rollback unless $self->_dbh_autocommit;
     $self->_dbh->disconnect;
     $self->_dbh(undef);
@@ -665,6 +693,7 @@ sub connected {
       }
       else {
           $self->_verify_pid;
+          return 0 if !$self->_dbh;
       }
       return ($dbh->FETCH('Active') && $dbh->ping);
   }
@@ -738,15 +767,42 @@ sub _populate_dbh {
     }
   }
 
-  # if on-connect sql statements are given execute them
-  foreach my $sql_statement (@{$self->on_connect_do || []}) {
-    $self->debugobj->query_start($sql_statement) if $self->debug();
-    $self->_dbh->do($sql_statement);
-    $self->debugobj->query_end($sql_statement) if $self->debug();
-  }
+  my $connection_do = $self->on_connect_do;
+  $self->_do_connection_actions($connection_do) if ref($connection_do);
 
   $self->_conn_pid($$);
   $self->_conn_tid(threads->tid) if $INC{'threads.pm'};
+}
+
+sub _do_connection_actions {
+  my $self = shift;
+  my $connection_do = shift;
+
+  if (ref $connection_do eq 'ARRAY') {
+    $self->_do_query($_) foreach @$connection_do;
+  }
+  elsif (ref $connection_do eq 'CODE') {
+    $connection_do->();
+  }
+
+  return $self;
+}
+
+sub _do_query {
+  my ($self, $action) = @_;
+
+  if (ref $action eq 'CODE') {
+    $action = $action->($self);
+    $self->_do_query($_) foreach @$action;
+  }
+  else {
+    my @to_run = (ref $action eq 'ARRAY') ? (@$action) : ($action);
+    $self->_query_start(@to_run);
+    $self->_dbh->do(@to_run);
+    $self->_query_end(@to_run);
+  }
+
+  return $self;
 }
 
 sub _connect {
@@ -770,7 +826,7 @@ sub _connect {
        $dbh = DBI->connect(@info);
     }
 
-    if(!$self->unsafe) {
+    if($dbh && !$self->unsafe) {
       my $weak_self = $self;
       weaken($weak_self);
       $dbh->{HandleError} = sub {
@@ -864,6 +920,40 @@ sub _prep_for_execute {
   return ($sql, \@bind);
 }
 
+sub _fix_bind_params {
+    my ($self, @bind) = @_;
+
+    ### Turn @bind from something like this:
+    ###   ( [ "artist", 1 ], [ "cdid", 1, 3 ] )
+    ### to this:
+    ###   ( "'1'", "'1'", "'3'" )
+    return
+        map {
+            if ( defined( $_ && $_->[1] ) ) {
+                map { qq{'$_'}; } @{$_}[ 1 .. $#$_ ];
+            }
+            else { q{'NULL'}; }
+        } @bind;
+}
+
+sub _query_start {
+    my ( $self, $sql, @bind ) = @_;
+
+    if ( $self->debug ) {
+        @bind = $self->_fix_bind_params(@bind);
+        $self->debugobj->query_start( $sql, @bind );
+    }
+}
+
+sub _query_end {
+    my ( $self, $sql, @bind ) = @_;
+
+    if ( $self->debug ) {
+        @bind = $self->_fix_bind_params(@bind);
+        $self->debugobj->query_end( $sql, @bind );
+    }
+}
+
 sub _dbh_execute {
   my ($self, $dbh, $op, $extra_bind, $ident, $bind_attributes, @args) = @_;
   
@@ -873,11 +963,7 @@ sub _dbh_execute {
 
   my ($sql, $bind) = $self->_prep_for_execute($op, $extra_bind, $ident, \@args);
 
-  if ($self->debug) {
-      my @debug_bind =
-        map { defined ($_ && $_->[1]) ? qq{'$_->[1]'} : q{'NULL'} } @$bind;
-      $self->debugobj->query_start($sql, @debug_bind);
-  }
+  $self->_query_start( $sql, @$bind );
 
   my $sth = $self->sth($sql,$op);
 
@@ -904,11 +990,7 @@ sub _dbh_execute {
   my $rv = $sth->execute();
   $self->throw_exception($sth->errstr) if !$rv;
 
-  if ($self->debug) {
-     my @debug_bind =
-       map { defined ($_ && $_->[1]) ? qq{'$_->[1]'} : q{'NULL'} } @$bind; 
-     $self->debugobj->query_end($sql, @debug_bind);
-  }
+  $self->_query_end( $sql, @$bind );
 
   return (wantarray ? ($rv, $sth, @$bind) : $rv);
 }
@@ -940,10 +1022,7 @@ sub insert_bulk {
   @colvalues{@$cols} = (0..$#$cols);
   my ($sql, @bind) = $self->sql_maker->insert($table, \%colvalues);
   
-  if ($self->debug) {
-      my @debug_bind = map { defined $_->[1] ? qq{$_->[1]} : q{'NULL'} } @bind;
-      $self->debugobj->query_start($sql, @debug_bind);
-  }
+  $self->_query_start( $sql, @bind );
   my $sth = $self->sth($sql);
 
 #  @bind = map { ref $_ ? ''.$_ : $_ } @bind; # stringify args
@@ -981,10 +1060,7 @@ sub insert_bulk {
   my $rv = $sth->execute_array({ArrayTupleStatus => $tuple_status});
   $self->throw_exception($sth->errstr) if !$rv;
 
-  if ($self->debug) {
-      my @debug_bind = map { defined $_ ? qq{`$_'} : q{`NULL'} } @bind;
-      $self->debugobj->query_end($sql, @debug_bind);
-  }
+  $self->_query_end( $sql, @bind );
   return (wantarray ? ($rv, $sth, @bind) : $rv);
 }
 
@@ -1061,7 +1137,7 @@ Handle a SQL select statement.
 sub select {
   my $self = shift;
   my ($ident, $select, $condition, $attrs) = @_;
-  return $self->cursor->new($self, \@_, $attrs);
+  return $self->cursor_class->new($self, \@_, $attrs);
 }
 
 sub select_single {
@@ -1414,14 +1490,14 @@ sub deploy {
       next if($line =~ /^BEGIN TRANSACTION/m);
       next if($line =~ /^COMMIT/m);
       next if $line =~ /^\s+$/; # skip whitespace only
-      $self->debugobj->query_start($line) if $self->debug;
+      $self->_query_start($line);
       eval {
         $self->dbh->do($line); # shouldn't be using ->dbh ?
       };
       if ($@) {
         warn qq{$@ (running "${line}")};
       }
-      $self->debugobj->query_end($line) if $self->debug;
+      $self->_query_end($line);
     }
   }
 }
