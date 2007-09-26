@@ -125,7 +125,7 @@ Returns this row's primary key.
 =cut
 
 sub id {
-    my $pkey = $_[0]->_primary_key();
+    my $pkey = ($_[0]->RESULT_SOURCE->primary_columns)[0];
     my $ret  = $_[0]->{'values'}->{$pkey};
     return $ret;
 }
@@ -203,7 +203,13 @@ sub _init_columns {
 
     my @pri = @{$self->_primary_keys};
 
-    $source->add_columns(@pri);
+    $source->add_columns(map {
+        ($_ => {
+            data_type => 'integer',
+            is_nullable => 0,
+            is_auto_increment => 1
+        })
+     } @pri);
     $source->set_primary_key(@pri);
 
     foreach my $column_name ( @pri ) {
