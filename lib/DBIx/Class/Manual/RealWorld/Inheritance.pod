@@ -1,0 +1,172 @@
+=head1 NAME 
+
+DBIx::Class::Manual::RealWorld::Inheritance - Real-world discussion of inheritance in
+relational databases and how to work with them in DBIx::Class.
+
+=head1 INHERITANCE
+
+=head2 . . . in the OO world
+
+Inheritance, or specialization, is one of the three pillars of Object-Oriented theory.
+It is the easiest concept to understand (moreso than Encapsulation or Abstraction) and
+provides the framework for code reuse.
+
+=head2 . . . in the relational world
+
+Relational theory is based in set theory. There is no concept of specialization
+whatsoever. In a set (or database table), all the rows are the same kind. To provide the
+concept of inheritance, the most common technique is to provide a table for each class.
+Parent classes then have a foreign key (FK) back to the child class.
+
+  child_table:
+      id    INTEGER PRIMARY KEY
+      attr1 CHAR
+      attr2 CHAR
+      attr3 CHAR
+
+  parent_table:
+      id       INTEGER PRIMARY KEY
+      child_id INTEGER REFERENCES child_table.id
+      attr4    CHAR
+      attr5    CHAR
+
+  other_parent_table:
+      id       INTEGER PRIMARY KEY
+      child_id INTEGER REFERENCES child_table.id
+      attr6    CHAR
+      attr7    CHAR
+
+And, if needed, you can have grandparent_table, and so forth. In theory, this could also
+work for multiple-inheritance, but that's rarely ever seen in the wild.
+
+=head1 TECHNIQUES
+
+(Or, where Neo comes to Morpheus for help in extending his database.)
+
+Neo: Morpheus, would you mind looking at this for me?
+
+Morpheus: What seems to be the problem?
+
+Neo: I'm confused as to how to design my DBIC classes for the new tables in the database.
+
+Morpheus: What are you confused about?
+
+Neo: We have an C<accounts> table in the database. The CEO has said that we will now
+have two new types of accounts in addition to the free accounts we have right now. Now,
+we will have two premium subscribers - one who pays per month and one who pays per use.
+
+Morpheus: Do you have your new schema?
+
+Neo: Yep. I'm going to use that thing you showed me last week where the new tables are
+foreign-key'ed off the accounts table we already have.
+
+Morpheus, So, what's the problem?
+
+Neo: Well, I've added the new DBIC classes for the new tables, but it doesn't feel right.
+
+Morpheus: What doesn't feel right?
+
+Neo: The classes aren't inheriting from each other. The tables are describing inherited
+data, but the methods aren't working right.
+
+Morpheus: What do you mean by "aren't working right"?
+
+Neo: Well, the first thing is that if I have a Schema::MonthlyAccount, I can't just call
+a method that's defined in Schema::Account, like C<username()>. I have to do something
+like C<< $account->account->username >> instead and that looks really dumb. So, they don't
+seem like there's an inheritance.
+
+Morpheus: What is inheritance?
+
+Neo: Huh? Inheritance is where you have two classes and one inherits from the other.
+
+Morpheus: What does that mean?
+
+Neo: It means that if you have a Vehicle class and a Car class, the Car class inherits
+from the Vehicle class.
+
+Morpheus: Functionally, what does that mean?
+
+Neo: It means that if a method can't be found in the Car class, call it in the Vehicle
+class.
+
+Morpheus: What would you call that if Car didn't inherit from Vehicle?
+
+Neo: Umm . . . isn't that delegation?
+
+Morpheus: Can you mimic inheritance with delegation?
+
+Neo: 
+
+the classnames aren't right. Instead of
+Schema::Account::Monthly and Schema::Account::PerUse, each inheriting from
+Schema::Account, I have Schema::MonthlyAccount and Schema::PerUseAccount. There isn't
+even a Schema::Account::Free.
+
+Morpheus: What's wrong with that?
+
+Neo: How am I going to remember what's related to what in a month? There's at least a
+hundred tables in the database. I can't remember every single one. Plus, it violates the
+coding standard you came up with!
+
+Morpheus: (smiling) Yes, it does. So, what do you think we should do?
+
+Neo: Well, can we have DBIC do that inheritance?
+
+Morpheus: What do the docs say?
+
+Neo: The docs don't say anything about it. No examples, nothing in the Cookbook. It's like
+no-one ever did this before.
+
+Morpheus: And how likely do you think that is?
+
+Neo: Ummm . . . not very likely. So, what's the solution?
+
+Morpheus: Do you think DBIC should be providing that inheritance?
+
+Neo: Shouldn't it? I mean, it's the model of our data. It should be modelling how we use
+our data.
+
+Morpheus: Is it the model of our data or our database?
+
+Neo: Isn't that the same thing?
+
+Morpheus: Is our database how the CEO views the data?
+
+Neo: Well, no. Duh! He thinks that . . . oh. I think I see what you're saying. Just
+because we store things in the database in a certain way doesn't mean that the business
+side of the application should work with it like that. So, what should I do?
+
+Morpheus: Should form follow function or function follow form?
+
+Neo: You've always told me that form should follow function; that the API for the class
+should always be usable in the way that the client is thinks of the class.
+
+Morpheus: How does that apply here?
+
+Neo: I don't see how it would app- . . . wait a minute. Are you saying that how the
+business looks at our data should be one view and how the database looks at it should be
+another.
+
+Morpheus: What would that imply?
+
+Neo: Well, that would mean that there should be a separate set of classes that show the
+data in the way that the business logic wants to use it. Why wouldn't we just use DBIC
+for that?
+
+Morpheus: Wasn't that the question you came to me with?
+
+Neo: Well, yeah. And you stil haven't answered it! (smiles)
+
+Morpheus: So, you're just as confused now as you were before?
+
+Neo: Well, no, I'm not. What I think you're saying is that we should have a second class
+hierarchy that is the actual business model. So, it is what the rest of the app talks to
+instead of DBIC. But, some of the DBIC methods are useful, like C<search()>. Isn't there a
+way to automatically call methods of another object?
+
+Morpheus: Delegation?
+
+Neo: Oh, yeah! Delegation. 
+
+=cut

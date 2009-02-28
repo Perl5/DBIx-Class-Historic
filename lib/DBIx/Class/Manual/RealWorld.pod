@@ -1,0 +1,21 @@
+=head1 NAME 
+
+DBIx::Class::Manual::RealWorld - Real-world discussions of how to best utilize
+DBIx::Class and other topics.
+
+=head1 DESCRIPTION
+
+While DBIx::Class and other ORMs have made great strides to make mapping a relational
+database to an object hierarchy simpler, the object-relational impedance mismatch always 
+seems to cause developers headaches. The following topics are ones that seem to come up
+over and over in #dbix-class and on the mailing list.
+
+=head1 TECHNIQUES
+
+=over 4
+
+=item * Inheritance
+
+=back
+
+=cut
