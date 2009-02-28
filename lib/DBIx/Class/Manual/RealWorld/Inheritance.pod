@@ -9,7 +9,7 @@ relational databases and how to work with them in DBIx::Class.
 
 Inheritance, or specialization, is one of the three pillars of Object-Oriented theory.
 It is the easiest concept to understand (moreso than Encapsulation or Abstraction) and
-provides the framework for code reuse.
+provides the framework for code reuse. At its heart, inheritance is structured delegation."If a method cannot be found in I<this class>, go look in I<that class> next."
 
 =head2 . . . in the relational world
 
@@ -96,33 +96,31 @@ Neo: Umm . . . isn't that delegation?
 
 Morpheus: Can you mimic inheritance with delegation?
 
-Neo: 
+Neo: (pauses) Huh. I suppose you could. So, write a method in Schema::MonthlyAccount for
+each of the columns in Schema::Account and have it get account and call the method on
+that? That seems like a lot of work.
 
-the classnames aren't right. Instead of
-Schema::Account::Monthly and Schema::Account::PerUse, each inheriting from
-Schema::Account, I have Schema::MonthlyAccount and Schema::PerUseAccount. There isn't
-even a Schema::Account::Free.
+Morpheus: Could Perl make it easier?
 
-Morpheus: What's wrong with that?
+Neo: Yeah, I suppose I could do some subroutine injection to build the methods. But, it
+would have to be updated every time Schema::Account changes. You've always told me that
+having things that need to be updated by hand is fragile.
 
-Neo: How am I going to remember what's related to what in a month? There's at least a
-hundred tables in the database. I can't remember every single one. Plus, it violates the
-coding standard you came up with!
+Morpheus: Is there a way of asking Schema::Account what its columns are?
 
-Morpheus: (smiling) Yes, it does. So, what do you think we should do?
+Neo: Ummm . . . I'm sure there is. Oh - so have it ask what the columns are. And, I can
+change the classnames and DBIC shouldn't care - it only cares about the tables. So, that's
+the solution, right?
 
-Neo: Well, can we have DBIC do that inheritance?
+Morpheus: What other places are the column names referenced?
 
-Morpheus: What do the docs say?
+Neo: That's it, isn't it?
 
-Neo: The docs don't say anything about it. No examples, nothing in the Cookbook. It's like
-no-one ever did this before.
+Morpheus: What about searching?
 
-Morpheus: And how likely do you think that is?
+Neo: Oh. There's no real way to make that work, is there?
 
-Neo: Ummm . . . not very likely. So, what's the solution?
-
-Morpheus: Do you think DBIC should be providing that inheritance?
+Morpheus: So, do you think DBIC should be providing that inheritance?
 
 Neo: Shouldn't it? I mean, it's the model of our data. It should be modelling how we use
 our data.
@@ -154,7 +152,7 @@ Neo: Well, that would mean that there should be a separate set of classes that s
 data in the way that the business logic wants to use it. Why wouldn't we just use DBIC
 for that?
 
-Morpheus: Wasn't that the question you came to me with?
+Morpheus: At its heart, isn't that question you started with?
 
 Neo: Well, yeah. And you stil haven't answered it! (smiles)
 
@@ -162,11 +160,30 @@ Morpheus: So, you're just as confused now as you were before?
 
 Neo: Well, no, I'm not. What I think you're saying is that we should have a second class
 hierarchy that is the actual business model. So, it is what the rest of the app talks to
-instead of DBIC. But, some of the DBIC methods are useful, like C<search()>. Isn't there a
-way to automatically call methods of another object?
+instead of DBIC. But, some of the DBIC methods are useful, like C<search()>. So, just use
+delegation there?
 
-Morpheus: Delegation?
+Morpheus: Since you have a proper class hierarchy, could you delegate in some base class?
 
-Neo: Oh, yeah! Delegation. 
+Neo: Oh, yeah! I could store the actual DBIC object to delegate to somewhere in some
+base class and provide the methods we need. Thanks, Morpheus!
+
+Morpheus: You're welcome.
+
+=head1 DISCUSSION
+
+=head2 DBIx::Class as datamodel
+
+Lorem ipso dolor . . . 
+
+=head2 A separate class hierarchy
+
+Lorem ipso dolor . . . 
+
+=head2 Resultsets vs. Rows
+
+Lorem ipso dolor . . . 
+
+Discuss result_class() vs. resultset_class()
 
 =cut
