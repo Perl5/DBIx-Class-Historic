@@ -1,43 +1,45 @@
 =head1 NAME 
 
-DBIx::Class::Manual::RealWorld::Inheritance - Real-world discussion of inheritance in
-relational databases and how to work with them in DBIx::Class.
+DBIx::Class::Manual::RealWorld::Inheritance - Real-world discussion of
+inheritance in relational databases and how to work with them in DBIx::Class.
 
 =head1 INHERITANCE
 
 =head2 . . . in the OO world
 
-Inheritance, or specialization, is one of the three pillars of Object-Oriented theory.
-It is the easiest concept to understand (moreso than Encapsulation or Abstraction) and
-provides the framework for code reuse. At its heart, inheritance is structured delegation."If a method cannot be found in I<this class>, go look in I<that class> next."
+Inheritance, or specialization, is one of the three pillars of Object-Oriented
+theory. It is the easiest concept to understand (moreso than Encapsulation or
+Abstraction) and provides the framework for code reuse. At its heart,
+inheritance is structured delegation."If a method cannot be found in I<this
+class>, go look in I<that class> next."
 
 =head2 . . . in the relational world
 
 Relational theory is based in set theory. There is no concept of specialization
-whatsoever. In a set (or database table), all the rows are the same kind. To provide the
-concept of inheritance, the most common technique is to provide a table for each class.
-Parent classes then have a foreign key (FK) back to the child class.
+whatsoever. In a set (or database table), all the rows are the same kind. To
+provide the concept of inheritance, the most common technique is to provide a
+table for each class. Parent classes then have a foreign key (FK) back to the
+child class.
 
-  child_table:
+  parent_table:
       id    INTEGER PRIMARY KEY
       attr1 CHAR
       attr2 CHAR
       attr3 CHAR
 
-  parent_table:
-      id       INTEGER PRIMARY KEY
-      child_id INTEGER REFERENCES child_table.id
+  child_table:
+      parent_id INTEGER PRIMARY KEY REFERENCES parent_table.id
       attr4    CHAR
       attr5    CHAR
 
-  other_parent_table:
-      id       INTEGER PRIMARY KEY
-      child_id INTEGER REFERENCES child_table.id
+  other_child_table:
+      parent_id INTEGER PRIMARY KEY REFERENCES parent_table.id
       attr6    CHAR
       attr7    CHAR
 
-And, if needed, you can have grandparent_table, and so forth. In theory, this could also
-work for multiple-inheritance, but that's rarely ever seen in the wild.
+And, if needed, you can have grandchild_table, and so forth. In theory, this
+could also work for multiple-inheritance, but that's rarely ever seen in the
+wild.
 
 =head1 TECHNIQUES
 
@@ -47,48 +49,52 @@ Neo: Morpheus, would you mind looking at this for me?
 
 Morpheus: What seems to be the problem?
 
-Neo: I'm confused as to how to design my DBIC classes for the new tables in the database.
+Neo: I'm confused as to how to design my DBIC classes for the new tables in the
+database.
 
 Morpheus: What are you confused about?
 
-Neo: We have an C<accounts> table in the database. The CEO has said that we will now
-have two new types of accounts in addition to the free accounts we have right now. Now,
-we will have two premium subscribers - one who pays per month and one who pays per use.
+Neo: We have an C<accounts> table in the database. The CEO has said that we will
+now have two new types of accounts in addition to the free accounts we have
+right now. Now, we will have two premium subscribers - one who pays per month
+and one who pays per use.
 
 Morpheus: Do you have your new schema?
 
-Neo: Yep. I'm going to use that thing you showed me last week where the new tables are
-foreign-key'ed off the accounts table we already have.
+Neo: Yep. I'm going to use that thing you showed me last week where the new
+tables are foreign-key'ed off the accounts table we already have.
 
 Morpheus, So, what's the problem?
 
-Neo: Well, I've added the new DBIC classes for the new tables, but it doesn't feel right.
+Neo: Well, I've added the new DBIC classes for the new tables, but it doesn't
+feel right.
 
 Morpheus: What doesn't feel right?
 
-Neo: The classes aren't inheriting from each other. The tables are describing inherited
-data, but the methods aren't working right.
+Neo: The classes aren't inheriting from each other. The tables are describing
+inherited data, but the methods aren't working right.
 
 Morpheus: What do you mean by "aren't working right"?
 
-Neo: Well, the first thing is that if I have a Schema::MonthlyAccount, I can't just call
-a method that's defined in Schema::Account, like C<username()>. I have to do something
-like C<< $account->account->username >> instead and that looks really dumb. So, they don't
-seem like there's an inheritance.
+Neo: Well, the first thing is that if I have a Schema::MonthlyAccount, I can't
+just call a method that's defined in Schema::Account, like C<username()>. I have
+to do something like C<< $account->account->username >> instead and that looks
+really dumb. So, they don't seem like there's an inheritance.
 
 Morpheus: What is inheritance?
 
-Neo: Huh? Inheritance is where you have two classes and one inherits from the other.
+Neo: Huh? Inheritance is where you have two classes and one inherits from the
+other.
 
 Morpheus: What does that mean?
 
-Neo: It means that if you have a Vehicle class and a Car class, the Car class inherits
-from the Vehicle class.
+Neo: It means that if you have a Vehicle class and a Car class, the Car class
+inherits from the Vehicle class.
 
 Morpheus: Functionally, what does that mean?
 
-Neo: It means that if a method can't be found in the Car class, call it in the Vehicle
-class.
+Neo: It means that if a method can't be found in the Car class, call it in the
+Vehicle class.
 
 Morpheus: What would you call that if Car didn't inherit from Vehicle?
 
@@ -96,21 +102,21 @@ Neo: Umm . . . isn't that delegation?
 
 Morpheus: Can you mimic inheritance with delegation?
 
-Neo: (pauses) Huh. I suppose you could. So, write a method in Schema::MonthlyAccount for
-each of the columns in Schema::Account and have it get account and call the method on
-that? That seems like a lot of work.
+Neo: (pauses) Huh. I suppose you could. So, write a method in
+Schema::MonthlyAccount for each of the columns in Schema::Account and have it
+get account and call the method on that? That seems like a lot of work.
 
 Morpheus: Could Perl make it easier?
 
-Neo: Yeah, I suppose I could do some subroutine injection to build the methods. But, it
-would have to be updated every time Schema::Account changes. You've always told me that
-having things that need to be updated by hand is fragile.
+Neo: Yeah, I suppose I could do some subroutine injection to build the methods.
+But, it would have to be updated every time Schema::Account changes. You've
+always told me that having things that need to be updated by hand is fragile.
 
 Morpheus: Is there a way of asking Schema::Account what its columns are?
 
-Neo: Ummm . . . I'm sure there is. Oh - so have it ask what the columns are. And, I can
-change the classnames and DBIC shouldn't care - it only cares about the tables. So, that's
-the solution, right?
+Neo: Ummm . . . I'm sure there is. Oh - so have it ask what the columns are.
+And, I can change the classnames and DBIC shouldn't care - it only cares about
+the tables. So, that's the solution, right?
 
 Morpheus: What other places are the column names referenced?
 
@@ -122,8 +128,8 @@ Neo: Oh. There's no real way to make that work, is there?
 
 Morpheus: So, do you think DBIC should be providing that inheritance?
 
-Neo: Shouldn't it? I mean, it's the model of our data. It should be modelling how we use
-our data.
+Neo: Shouldn't it? I mean, it's the model of our data. It should be modelling
+how we use our data.
 
 Morpheus: Is it the model of our data or our database?
 
@@ -131,26 +137,28 @@ Neo: Isn't that the same thing?
 
 Morpheus: Is our database how the CEO views the data?
 
-Neo: Well, no. Duh! He thinks that . . . oh. I think I see what you're saying. Just
-because we store things in the database in a certain way doesn't mean that the business
-side of the application should work with it like that. So, what should I do?
+Neo: Well, no. Duh! He thinks that . . . oh. I think I see what you're saying.
+Just because we store things in the database in a certain way doesn't mean that
+the business side of the application should work with it like that. So, what
+should I do?
 
 Morpheus: Should form follow function or function follow form?
 
-Neo: You've always told me that form should follow function; that the API for the class
-should always be usable in the way that the client is thinks of the class.
+Neo: You've always told me that form should follow function; that the API for
+the class should always be usable in the way that the client is thinks of the
+class.
 
 Morpheus: How does that apply here?
 
-Neo: I don't see how it would app- . . . wait a minute. Are you saying that how the
-business looks at our data should be one view and how the database looks at it should be
-another.
+Neo: I don't see how it would app- . . . wait a minute. Are you saying that how
+the business looks at our data should be one view and how the database looks at
+it should be another.
 
 Morpheus: What would that imply?
 
-Neo: Well, that would mean that there should be a separate set of classes that show the
-data in the way that the business logic wants to use it. Why wouldn't we just use DBIC
-for that?
+Neo: Well, that would mean that there should be a separate set of classes that
+show the data in the way that the business logic wants to use it. Why wouldn't
+we just use DBIC for that?
 
 Morpheus: At its heart, isn't that question you started with?
 
@@ -158,15 +166,16 @@ Neo: Well, yeah. And you stil haven't answered it! (smiles)
 
 Morpheus: So, you're just as confused now as you were before?
 
-Neo: Well, no, I'm not. What I think you're saying is that we should have a second class
-hierarchy that is the actual business model. So, it is what the rest of the app talks to
-instead of DBIC. But, some of the DBIC methods are useful, like C<search()>. So, just use
-delegation there?
+Neo: Well, no, I'm not. What I think you're saying is that we should have a
+second class hierarchy that is the actual business model. So, it is what the
+rest of the app talks to instead of DBIC. But, some of the DBIC methods are
+useful, like C<search()>. So, just use delegation there?
 
-Morpheus: Since you have a proper class hierarchy, could you delegate in some base class?
+Morpheus: Since you have a proper class hierarchy, could you delegate in some
+base class?
 
-Neo: Oh, yeah! I could store the actual DBIC object to delegate to somewhere in some
-base class and provide the methods we need. Thanks, Morpheus!
+Neo: Oh, yeah! I could store the actual DBIC object to delegate to somewhere in
+some base class and provide the methods we need. Thanks, Morpheus!
 
 Morpheus: You're welcome.
 
