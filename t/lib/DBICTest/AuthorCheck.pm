@@ -39,13 +39,9 @@ sub _check_author_makefile {
   
   if(not -d $root->subdir ('inc')) {
 	push @reasons, "Missing inc directory";
-  }
-  
-  if(not $mf_mtime) {
+  } elsif(not $mf_mtime) {
 	push @reasons, "Missing Makefile";
-  }
-
-  if($mf_mtime < $mf_pl_mtime) {
+  } elsif($mf_mtime < $mf_pl_mtime) {
 	push @reasons, "Makefile.PL is newer than Makefile";
   }
   
@@ -59,6 +55,16 @@ sub _check_author_makefile {
 ======================== FATAL ERROR ===========================
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+Reasons you received this message:
+
+EOE
+
+	foreach my $reason (@reasons) {
+		print STDERR "\t* $reason\n";
+	}
+
+	print STDERR <<'EOE';
+	
 We have a number of reasons to believe that this is a development
 checkout and that you, the user, did not run `perl Makefile.PL`
 before using this code. You absolutely _must_ perform this step,
@@ -80,14 +86,8 @@ entirely.
 The DBIC team
 
 EOE
-
-	print STDERR "Reasons you received this message:\n\n";
-	foreach my $reason (@reasons) {
-		print STDERR "\t* $reason\n";
-	}
-	print STDERR "\n\n";
-
-    exit 1;
+    
+	exit 1;
   }
 }
 
