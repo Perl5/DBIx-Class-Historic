@@ -1,24 +1,23 @@
 
-use Test::More tests => 13; 
+use Test::More tests => 12; 
 use Test::Exception;
 use lib qw(t/lib);
 
-use_ok( 'DBIx::Class::Schema::ScriptDo' );
 use_ok('DBICTest');
 ok(my $schema = DBICTest->init_schema(), 'got schema');
 
 throws_ok {
-	$schema->_execute_single_statement(qw/asdasdasd/);
+	$schema->storage->_execute_single_statement(qw/asdasdasd/);
 } qr/DBI Exception: DBD::SQLite::db do failed:/, 'Correctly died!';
 
 throws_ok {
-	$schema->_normalize_fh_from_args(qw/t share scriptXXX.sql/);	
+	$schema->storage->_normalize_fh_from_args(qw/t share scriptXXX.sql/);	
 } qr/Can't open file/, 'Dies with bad filehandle';
 
-ok my $fh = $schema->_normalize_fh_from_args(qw/t share script1.sql/),
+ok my $fh = $schema->storage->_normalize_fh_from_args(qw/t share basic.sql/),
   'Got good filehandle';
 
-ok my @lines = $schema->_normalize_lines_from_fh($fh), 'Got some lines';
+ok my @lines = $schema->storage->_normalize_lines_from_fh($fh), 'Got some lines';
 
 is_deeply [@lines], [
   "CREATE TABLE cd_to_producer (",
@@ -57,7 +56,7 @@ is_deeply [@lines], [
   ");",	
 	], 'Got expected lines';
 
-ok my @statements = $schema->_normalize_statements_from_lines(@lines),
+ok my @statements = $schema->storage->_normalize_statements_from_lines(@lines),
    'Got Statements';
 
 is_deeply [@statements], [
@@ -115,11 +114,9 @@ is_deeply [@statements], [
   ], 
 	], 'Got expect Lines';
 	
-	
-ok $schema->_execute_single_statement(
-	'insert into artist( artistid,name )',
-	'values( 777777,"--commented" );',
-	), 'executed statement';
+lives_ok {
+	$schema->storage->_execute_single_statement('insert into artist( artistid,name) values( 777777,"--commented" );');
+} 'executed statement';
 
-ok $schema->run_file_against_storage(qw/t share simple.sql/), 'executed the simple';
-ok $schema->run_file_against_storage(qw/t share killer.sql/), 'executed the killer';
+ok $schema->storage->run_file_against_storage(qw/t share simple.sql/), 'executed the simple';
+ok $schema->storage->run_file_against_storage(qw/t share killer.sql/), 'executed the killer';
