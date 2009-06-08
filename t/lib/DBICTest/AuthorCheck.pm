@@ -34,14 +34,22 @@ sub _check_author_makefile {
   );
 
   return unless $mf_pl_mtime;   # something went wrong during co_root detection ?
+  
+  my @reasons;
+  
+  if(not -d $root->subdir ('inc')) {
+	push @reasons, "Missing inc directory";
+  }
+  
+  if(not $mf_mtime) {
+	push @reasons, "Missing Makefile";
+  }
 
-  if (
-    not -d $root->subdir ('inc') 
-      or
-    not $mf_mtime
-      or
-    $mf_mtime < $mf_pl_mtime
-  ) {
+  if($mf_mtime < $mf_pl_mtime) {
+	push @reasons, "Makefile.PL is newer than Makefile";
+  }
+  
+  if (@reasons) {
     print STDERR <<'EOE';
 
 
@@ -71,9 +79,13 @@ entirely.
 
 The DBIC team
 
-
-
 EOE
+
+	print STDERR "Reasons you received this message:\n\n";
+	foreach my $reason (@reasons) {
+		print STDERR "\t* $reason\n";
+	}
+	print STDERR "\n\n";
 
     exit 1;
   }
