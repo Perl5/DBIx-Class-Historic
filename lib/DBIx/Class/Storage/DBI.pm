@@ -1691,12 +1691,16 @@ sub deployment_statements {
   my $filename = $schema->ddl_filename($type, $version, $dir);
   if(-f $filename)
   {
-      my $file;
-      open($file, "<$filename") 
-        or $self->throw_exception("Can't open $filename ($!)");
-      my @rows = <$file>;
-      close($file);
-      return join('', @rows);
+      my $fh = $self->_normalize_fh_from_args($filename);
+      my @lines = $self->_normalize_lines_from_fh($fh);
+      return join('', @lines);
+	  
+      ##my $file;
+      ##open($file, "<$filename") 
+      ##  or $self->throw_exception("Can't open $filename ($!)");
+      ##my @rows = <$file>;
+      ##close($file);
+      ##return join('', @rows);
   }
 
   $self->throw_exception(q{Can't deploy without SQL::Translator 0.09003: '}
