@@ -1692,8 +1692,8 @@ sub deployment_statements {
   if(-f $filename)
   {
       my $fh = $self->_normalize_fh_from_args($filename);
-      my @lines = $self->_normalize_lines_from_fh($fh);
-      return join('', @lines);
+      my @lines = $self->_normalize_lines(<$fh>);
+      return wantarray ? @lines : join('', @lines);
   }
 
   $self->throw_exception(q{Can't deploy without SQL::Translator 0.09003: '}
@@ -1711,7 +1711,9 @@ sub deployment_statements {
 
   my $tr = SQL::Translator->new(%$sqltargs);
   SQL::Translator::Parser::DBIx::Class::parse( $tr, $schema );
-  return "SQL::Translator::Producer::${type}"->can('produce')->($tr);
+  my @lines = "SQL::Translator::Producer::${type}"->can('produce')->($tr);
+  @lines = $self->_normalize_lines(@lines);
+  return wantarray ? @lines : join('', @lines);
 }
 
 sub deploy {
@@ -1817,7 +1819,7 @@ be true if the script executes anything at all.
 sub run_file_against_storage {
   my ($self, @args) = @_;
   my $fh = $self->_normalize_fh_from_args(@args);
-  my @lines = $self->_normalize_lines_from_fh($fh);
+  my @lines = $self->_normalize_lines(<$fh>);
   my @statements = $self->_normalize_statements_from_lines(@lines);
   return $self->txn_do(sub {
     return $self->_execute_statements(@_);
@@ -1860,8 +1862,13 @@ sub _execute_single_statement {
     return $self->dbh_do(sub {
       my ($storage, $dbh, $schema, $statement) = @_;
 	  $schema->_query_start($statement);
-      $dbh->do($statement)
-        || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);		
+	  eval {
+        $dbh->do($statement)
+          || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);		
+	  }; if($@) {
+        carp qq{$@ (running "${statement}")};
+	  }
+		
       $schema->_query_end($statement);
     }, $self, $statement);
   } else {
@@ -1890,18 +1897,17 @@ sub _normalize_fh_from_args {
   return $fh;
 }
 
-=head2 _normalize_lines_from_fh ($filehandle)
+=head2 _normalize_lines (@lines)
 
-Given a $filehandle, will return an array of normalized lines statement that we
+Given anes, will return an array of normalized lines statement that we
 can group into statements.  We do our best to strip out comment lines, blank
 lines and anything else that might cause an error.  We also split lines based
 on the ';' deliminator, since that's pretty standard.
 
 =cut
 
-sub _normalize_lines_from_fh {
-  my ($self, $fh) = @_;
-
+sub _normalize_lines {
+  my $self = shift @_;
   my $deliminator=qr{;|.$};
   my $quote=qr{'|"};
   my $quoted=qr{$quote.+?$quote};
@@ -1909,7 +1915,7 @@ sub _normalize_lines_from_fh {
   my $comment = qr{--};
 
   my @lines;
-  foreach my $line (<$fh>) {
+  foreach my $line (@_) {
     $line=~s/\n|\r|\r\n|\n\r$//g;
     ## Skip if the line is blank, whitespace only or a comment line 
     if(!$line || $line=~m/^\s* $comment/x || $line=~m/^\s*$/) {
@@ -1926,7 +1932,7 @@ sub _normalize_lines_from_fh {
         $_=~s/$deliminator \s*?$comment.*?$//x; ## trim off ending comments        
         $_=~s/^\s*//g; ## trim leading whitespace
         $_=~s/\s*$//g; ## trim ending whitespace
-        $_
+        $_;
       } @parts;
       push @lines, @parts;
     }
