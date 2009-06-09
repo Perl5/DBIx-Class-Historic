@@ -129,15 +129,7 @@ sub deploy_schema {
     if ($ENV{"DBICTEST_SQLT_DEPLOY"}) { 
         $schema->deploy($args);    
     } else {
-        open IN, "t/lib/sqlite.sql";
-        my $sql;
-        { local $/ = undef; $sql = <IN>; }
-        close IN;
-        for my $chunk ( split (/;\s*\n+/, $sql) ) {
-          if ( $chunk =~ / ^ (?! --\s* ) \S /xm ) {  # there is some real sql in the chunk - a non-space at the start of the string which is not a comment
-            $schema->storage->dbh->do($chunk) or print "Error on SQL: $chunk\n";
-          }
-        }
+		$schema->storage->run_file_against_storage(qw/t lib sqlite.sql/);
     }
     return;
 }

@@ -303,6 +303,7 @@ has 'write_handler' => (
     sth
     deploy
     with_deferred_fk_checks
+	run_file_against_storage
 
     reload_row
     _prep_for_execute

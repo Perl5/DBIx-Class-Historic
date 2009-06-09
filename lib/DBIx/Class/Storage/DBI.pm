@@ -1844,17 +1844,18 @@ be true if the script executes anything at all.
 =cut
 
 sub run_file_against_storage {
-	my ($self, @args) = @_;
-	my $fh = $self->_normalize_fh_from_args(@args);
-	my @lines = $self->_normalize_lines_from_fh($fh);
-	my @statements = $self->_normalize_statements_from_lines(join(' ', @lines));
-	return $self->txn_do(sub {
-		my @return;
-		foreach my $statement (@statements) {
-			push @return, $self->_execute_single_statement(@$statement);
-		}
-		return @return;
-	});
+  my ($self, @args) = @_;
+  my $fh = $self->_normalize_fh_from_args(@args);
+  my @lines = $self->_normalize_lines_from_fh($fh);
+  my @statements = $self->_normalize_statements_from_lines(@lines);
+  return $self->txn_do(sub {
+    my @return;
+    foreach my $statement (@statements) {
+      my $single_statement = join(' ',@$statement);
+      push @return, $self->_execute_single_statement($single_statement);
+    }
+    return @return;
+  });
 }
 
 =head2 _execute_single_statement ($String|@Strings)
@@ -1864,22 +1865,22 @@ Given a SQL statement, do our best to safely execute it.
 =cut
 
 sub _execute_single_statement {
-	my ($self, $statement) = @_;
-	if($statement) {
-		return $self->dbh_do(sub {
-			my ($storage, $dbh, $schema, $statement) = @_;
-			$storage->debugobj->query_start("Doing: $statement")
-			 if $storage->debug;
-			$dbh->do($statement) 
-			 || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);
-			$storage->debugobj->query_end("Done: $statement")
-			 if $storage->debug;
-		}, $self, $statement);
-	} else {
-		$self->debugobj("No commands to do!")
-		 if $self->debug;
-		return;
-	}
+  my ($self, $statement) = @_;
+  if($statement) {
+    return $self->dbh_do(sub {
+      my ($storage, $dbh, $schema, $statement) = @_;
+      $storage->debugobj->query_start("Doing: $statement")
+       if $storage->debug;
+      $dbh->do($statement) 
+       || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);
+      $storage->debugobj->query_end("Done: $statement")
+       if $storage->debug;
+    }, $self, $statement);
+  } else {
+    $self->debugobj("No commands to do!")
+     if $self->debug;
+    return;
+  }
 }
 
 =head2 _normalize_fh_from_args (Path::Class::File|String|@Strings)
@@ -1894,11 +1895,11 @@ running platform.
 =cut
 
 sub _normalize_fh_from_args {
-	my ($self, @args) = @_;
-	my $file = Path::Class::File->new(@args);
-	open(my $fh, "<:raw:eol(NATIVE)", $file) ||
-	  $self->throw_exception("Can't open file '$file'. Error: $!");
-	return $fh;
+  my ($self, @args) = @_;
+  my $file = Path::Class::File->new(@args);
+  open(my $fh, "<", $file) ||
+    $self->throw_exception("Can't open file '$file'. Error: $!");
+  return $fh;
 }
 
 =head2 _normalize_lines_from_fh ($filehandle)
@@ -1911,38 +1912,38 @@ on the ';' deliminator, since that's pretty standard.
 =cut
 
 sub _normalize_lines_from_fh {
-	my ($self, $fh) = @_;
+  my ($self, $fh) = @_;
 
-	my $deliminator=qr{;|.$};
-	my $quote=qr{'|"};
-	my $quoted=qr{$quote.+?$quote};
-	my $block=qr{$quoted|.};
-	my $comment = qr{--};
+  my $deliminator=qr{;|.$};
+  my $quote=qr{'|"};
+  my $quoted=qr{$quote.+?$quote};
+  my $block=qr{$quoted|.};
+  my $comment = qr{--};
 
-	my @lines;
-	foreach my $line (<$fh>) {
-		chomp $line;
-		## Skip if the line is blank, whitespace only or a comment line 
-		if(!$line || $line=~m/^\s* $comment/x || $line=~m/^\s*$/) {
-			next;
-		} else {
-			## a line may contain several commands
-			my @parts = ($line=~m/$block*?$deliminator/xg);
-			## clean empty or comment only lines
-			@parts = grep { $_ && $_ !~m/^\s* $comment/x } @parts;
-			## We are going to wrap it all in a transaction anyway
-			@parts = grep { $_ !~ /^(BEGIN|BEGIN TRANSACTION|COMMIT)/m } @parts;
-			## Some cleanup
-			@parts = map {
-				$_=~s/$deliminator \s*?$comment.*?$//x; ## trim off ending comments				
-				$_=~s/^\s*//g; ## trim leading whitespace
-				$_=~s/\s*$//g; ## trim ending whitespace
-				$_
-			} @parts;
-			push @lines, @parts;
-		}
-	}
-	return @lines;
+  my @lines;
+  foreach my $line (<$fh>) {
+    $line=~s/\n|\r|\r\n|\n\r$//g;
+    ## Skip if the line is blank, whitespace only or a comment line 
+    if(!$line || $line=~m/^\s* $comment/x || $line=~m/^\s*$/) {
+      next;
+    } else {
+      ## a line may contain several commands
+      my @parts = ($line=~m/$block*?$deliminator/xg);
+      ## clean empty or comment only lines
+      @parts = grep { $_ && $_ !~m/^\s* $comment/x } @parts;
+      ## We are going to wrap it all in a transaction anyway
+      @parts = grep { $_ !~ /^(BEGIN|BEGIN TRANSACTION|COMMIT)/m } @parts;
+      ## Some cleanup
+      @parts = map {
+        $_=~s/$deliminator \s*?$comment.*?$//x; ## trim off ending comments        
+        $_=~s/^\s*//g; ## trim leading whitespace
+        $_=~s/\s*$//g; ## trim ending whitespace
+        $_
+      } @parts;
+      push @lines, @parts;
+    }
+  }
+  return @lines;
 }
 
 =head2 _normalize_statements_from_lines (@lines)
@@ -1955,17 +1956,17 @@ Returns an array of arrayrefs.
 =cut
 
 sub _normalize_statements_from_lines {
-	my ($self, @lines) = @_;
-	my @statements;
-	my $statement = [];
-	foreach my $line (@lines) {
-		push @{$statement}, $line;
-		if($line=~m/;$/) {
-			push @statements, $statement;
-			$statement = [];
-		}
-	}
-	return @statements;	
+  my ($self, @lines) = @_;
+  my @statements;
+  my $statement = [];
+  foreach my $line (@lines) {
+    push @{$statement}, $line;
+    if($line=~m/;$/) {
+      push @statements, $statement;
+      $statement = [];
+    }
+  }
+  return @statements;  
 }
 
 sub DESTROY {
