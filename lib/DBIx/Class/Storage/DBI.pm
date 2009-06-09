@@ -1694,13 +1694,6 @@ sub deployment_statements {
       my $fh = $self->_normalize_fh_from_args($filename);
       my @lines = $self->_normalize_lines_from_fh($fh);
       return join('', @lines);
-	  
-      ##my $file;
-      ##open($file, "<$filename") 
-      ##  or $self->throw_exception("Can't open $filename ($!)");
-      ##my @rows = <$file>;
-      ##close($file);
-      ##return join('', @rows);
   }
 
   $self->throw_exception(q{Can't deploy without SQL::Translator 0.09003: '}
@@ -1723,34 +1716,8 @@ sub deployment_statements {
 
 sub deploy {
   my ($self, $schema, $type, $sqltargs, $dir) = @_;
-  my $deploy = sub {
-    my $line = shift;
-    return if($line =~ /^--/);
-    return if(!$line);
-    # next if($line =~ /^DROP/m);
-    return if($line =~ /^BEGIN TRANSACTION/m);
-    return if($line =~ /^COMMIT/m);
-    return if $line =~ /^\s+$/; # skip whitespace only
-    $self->_query_start($line);
-    eval {
-      $self->dbh->do($line); # shouldn't be using ->dbh ?
-    };
-    if ($@) {
-      carp qq{$@ (running "${line}")};
-    }
-    $self->_query_end($line);
-  };
   my @statements = $self->deployment_statements($schema, $type, undef, $dir, { %{ $sqltargs || {} }, no_comments => 1 } );
-  if (@statements > 1) {
-    foreach my $statement (@statements) {
-      $deploy->( $statement );
-    }
-  }
-  elsif (@statements == 1) {
-    foreach my $line ( split(";\n", $statements[0])) {
-      $deploy->( $line );
-    }
-  }
+  $self->_execute_statements(@statements);
 }
 
 =head2 datetime_parser
@@ -1853,13 +1820,32 @@ sub run_file_against_storage {
   my @lines = $self->_normalize_lines_from_fh($fh);
   my @statements = $self->_normalize_statements_from_lines(@lines);
   return $self->txn_do(sub {
-    my @return;
-    foreach my $statement (@statements) {
-      my $single_statement = join(' ',@$statement);
-      push @return, $self->_execute_single_statement($single_statement);
-    }
-    return @return;
-  });
+    return $self->_execute_statements(@_);
+  }, @statements);
+}
+
+=head2 _execute_statements(@statements)
+
+Given a list of @statements as returned my L</_normalize_statements_from_lines>
+try to execute them cleanly.
+
+=cut
+
+sub _execute_statements {
+  my ($self, @statements) = @_;
+  if(@statements) {
+    return $self->txn_do(sub {
+      my @return;
+      foreach my $statement (@_) {
+        my $single_statement = ref $statement eq 'ARRAY' ? join(' ',@$statement) : $statement;
+        push @return, $self->_execute_single_statement($single_statement);
+      }
+    return @return;		
+    }, @statements);
+  } else {
+    $self->debugobj("No statement to execute!")
+     if $self->debug;	
+  }
 }
 
 =head2 _execute_single_statement ($String|@Strings)
@@ -1873,15 +1859,13 @@ sub _execute_single_statement {
   if($statement) {
     return $self->dbh_do(sub {
       my ($storage, $dbh, $schema, $statement) = @_;
-      $storage->debugobj->query_start("Doing: $statement")
-       if $storage->debug;
-      $dbh->do($statement) 
-       || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);
-      $storage->debugobj->query_end("Done: $statement")
-       if $storage->debug;
+	  $schema->_query_start($statement);
+      $dbh->do($statement)
+        || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);		
+      $schema->_query_end($statement);
     }, $self, $statement);
   } else {
-    $self->debugobj("No commands to do!")
+    $self->debugobj("No statement to execute!")
      if $self->debug;
     return;
   }
