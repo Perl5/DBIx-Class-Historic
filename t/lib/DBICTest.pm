@@ -129,7 +129,7 @@ sub deploy_schema {
     if ($ENV{"DBICTEST_SQLT_DEPLOY"}) { 
         $schema->deploy($args);    
     } else {
-		$schema->storage->run_file_against_storage(qw/t lib sqlite.sql/);
+      $schema->storage->run_file_against_storage(qw/t lib sqlite.sql/);
     }
     return;
 }

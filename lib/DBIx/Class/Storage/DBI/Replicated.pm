@@ -2,10 +2,10 @@ package DBIx::Class::Storage::DBI::Replicated;
 
 BEGIN {
   use Carp::Clan qw/^DBIx::Class/;
-	
+
   ## Modules required for Replication support not required for general DBIC
   ## use, so we explicitly test for these.
-	
+
   my %replication_required = (
     Moose => '0.77',
     MooseX::AttributeHelpers => '0.12',
@@ -13,17 +13,16 @@ BEGIN {
     namespace::clean => '0.11',
     Hash::Merge => '0.11'
   );
-	
+
   my @didnt_load;
-  
+
   for my $module (keys %replication_required) {
-	eval "use $module $replication_required{$module}";
-	push @didnt_load, "$module $replication_required{$module}"
-	 if $@;
+    eval "use $module $replication_required{$module}";
+    push @didnt_load, "$module $replication_required{$module}" if $@;
   }
-	
+
   croak("@{[ join ', ', @didnt_load ]} are missing and are required for Replication")
-    if @didnt_load;  	
+    if @didnt_load;
 }
 
 use Moose;
@@ -278,9 +277,9 @@ has 'write_handler' => (
   is=>'ro',
   isa=>Object,
   lazy_build=>1,
-  handles=>[qw/   
+  handles=>[qw/
     on_connect_do
-    on_disconnect_do       
+    on_disconnect_do
     connect_info
     throw_exception
     sql_maker
@@ -288,7 +287,7 @@ has 'write_handler' => (
     create_ddl_dir
     deployment_statements
     datetime_parser
-    datetime_parser_type        
+    datetime_parser_type
     last_insert_id
     insert
     insert_bulk
@@ -303,11 +302,11 @@ has 'write_handler' => (
     sth
     deploy
     with_deferred_fk_checks
-	run_file_against_storage
+    run_file_against_storage
 
     reload_row
     _prep_for_execute
-    
+
   /],
 );
 
