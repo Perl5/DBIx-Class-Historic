@@ -1778,7 +1778,7 @@ sub deployment_statements {
   {
       my $fh = $self->_normalize_fh_from_args($filename);
       my @lines = $self->_normalize_lines(<$fh>);
-      return wantarray ? @lines : join('', @lines);
+      return wantarray ? @lines : join(';', @lines);
   }
 
   $self->throw_exception(q{Can't deploy without SQL::Translator 0.09003: '}
@@ -1798,13 +1798,15 @@ sub deployment_statements {
   SQL::Translator::Parser::DBIx::Class::parse( $tr, $schema );
   my @lines = "SQL::Translator::Producer::${type}"->can('produce')->($tr);
   @lines = $self->_normalize_lines(@lines);
-  return wantarray ? @lines : join('', @lines);
+  return wantarray ? @lines : join(';', @lines);
 }
 
 sub deploy {
   my ($self, $schema, $type, $sqltargs, $dir) = @_;
-  my @statements = $self->deployment_statements($schema, $type, undef, $dir, { %{ $sqltargs || {} }, no_comments => 1 } );
-  $self->_execute_statements(@statements);
+  my @statements = $self->deployment_statements(
+  	$schema, $type, undef, $dir, { %{ $sqltargs || {} }, no_comments => 1 }
+  );
+  return $self->_execute_statements(@statements);
 }
 
 =head2 datetime_parser
@@ -1950,8 +1952,9 @@ sub _execute_single_statement {
 	  eval {
         $dbh->do($statement)
           || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);		
-	  }; if($@) {
-        carp qq{$@ (running "${statement}")};
+	  }; 
+	  if($@) {
+		carp "$@ (running $statement)";
 	  }
 		
       $schema->_query_end($statement);
@@ -1976,10 +1979,14 @@ running platform.
 
 sub _normalize_fh_from_args {
   my ($self, @args) = @_;
-  my $file = Path::Class::File->new(@args);
-  open(my $fh, "<", $file) ||
-    $self->throw_exception("Can't open file '$file'. Error: $!");
-  return $fh;
+  if(my $fh = Scalar::Util::openhandle($args[0])) {
+    return $fh;   
+  } else {
+    my $file = Path::Class::File->new(@args);
+    open(my $fh, "<", $file) ||
+      $self->throw_exception("Can't open file '$file'. Error: $!");
+    return $fh;
+  }
 }
 
 =head2 _normalize_lines (@lines)
@@ -1998,10 +2005,9 @@ sub _normalize_lines {
   my $quoted=qr{$quote.+?$quote};
   my $block=qr{$quoted|.};
   my $comment = qr{--};
-
   my @lines;
   foreach my $line (@_) {
-    $line=~s/\n|\r|\r\n|\n\r$//g;
+	$line=~s/\n|\r|\r\n|\n\r//g; ## Clear any type of eol characters 
     ## Skip if the line is blank, whitespace only or a comment line 
     if(!$line || $line=~m/^\s* $comment/x || $line=~m/^\s*$/) {
       next;
@@ -2030,7 +2036,11 @@ sub _normalize_lines {
 Give an array of lines, group them into whole statements.  This is to handle
 how a given statement might have been broken across multiple lines
 
-Returns an array of arrayrefs.
+Returns an array of arrayrefs, where each item is an arrayref of statement
+'chunks'.  The idea here is to group statements but preserve the fact that
+an original raw read of a file split statements across multiple lines.  This
+is important since many database engines have limitations as to how many
+columns a line can span.
 
 =cut
 

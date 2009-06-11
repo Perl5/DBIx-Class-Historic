@@ -131,7 +131,6 @@ sub deploy_schema {
     } else {
       $schema->storage->run_file_against_storage(qw/t lib sqlite.sql/);
     }
-    return;
 }
 
 =head2 populate_schema
