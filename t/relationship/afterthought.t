@@ -20,6 +20,11 @@ my @previous_rels = sort $schema->source('Artist')->relationships;
 my $class = $schema->class('Artist');
 $class->belongs_to('rank' => $schema->class('Lyrics'));
 
+# Re-register the source:
+$schema->register_extra_source(
+    Artist => $schema->class('Artist')->new->result_source_instance
+);
+
 # Now check we have the relationship:
 my $source = $schema->source('Artist');
 
