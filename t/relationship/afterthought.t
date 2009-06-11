@@ -21,9 +21,13 @@ my $class = $schema->class('Artist');
 $class->belongs_to('rank' => $schema->class('Lyrics'));
 
 # Re-register the source:
-$schema->register_extra_source(
-    Artist => $schema->class('Artist')->new->result_source_instance
-);
+{
+    my $class = $schema->class('Artist');
+    $schema->_unregister_source('Artist');
+    $schema->register_source(
+        Artist => $class->new->result_source_instance
+    );
+}
 
 # Now check we have the relationship:
 my $source = $schema->source('Artist');
