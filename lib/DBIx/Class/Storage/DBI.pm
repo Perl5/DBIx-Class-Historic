@@ -1887,7 +1887,17 @@ sub lag_behind_master {
     return;
 }
 
-=head2 run_file_against_storage (Path::Class::File|String|@Strings)
+=head2 run_file_against_storage 
+
+  my @results = $storage->run_file_against_storage($path_to_file)
+
+=over
+
+=item Arguments: (Path::Class::File|String|@Strings)
+
+=item Returns: Array of results from executing each statement.
+
+=back
 
 Given a path to file, will try to execute it line by line against the connected
 database engine.  Throws an exception and tries to rollback if an error occurs.
@@ -1913,7 +1923,17 @@ sub run_file_against_storage {
   }, @statements);
 }
 
-=head2 _execute_statements(@statements)
+=head2 _execute_statements
+
+  $storage->_execute_statements(@statements)
+
+=over
+
+=item Arguments: Array of Statements
+
+=item Returns: An Array of Results from each executed String
+
+=back
 
 Given a list of @statements as returned my L</_normalize_statements_from_lines>
 try to execute them cleanly.
@@ -1932,12 +1952,22 @@ sub _execute_statements {
     return @return;		
     }, @statements);
   } else {
-    $self->debugobj("No statement to execute!")
+    $self->debugobj->print("No statement to execute!")
      if $self->debug;	
   }
 }
 
-=head2 _execute_single_statement ($String|@Strings)
+=head2 _execute_single_statement
+
+  $storage->_execute_single_statement($statement)
+
+=over
+
+=item Arguments: String
+
+=item Returns: Result of $dbh->do($string) or throws exception
+
+=back
 
 Given a SQL statement, do our best to safely execute it.
 
@@ -1948,32 +1978,43 @@ sub _execute_single_statement {
   if($statement) {
     return $self->dbh_do(sub {
       my ($storage, $dbh, $schema, $statement) = @_;
+	  my $return;
 	  $schema->_query_start($statement);
 	  eval {
-        $dbh->do($statement)
+        $return = $dbh->do($statement)
           || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);		
 	  }; 
 	  if($@) {
 		carp "$@ (running $statement)";
 	  }
-		
       $schema->_query_end($statement);
+	  return $return;
     }, $self, $statement);
   } else {
-    $self->debugobj("No statement to execute!")
+    $self->debugobj->print("No statement to execute!")
      if $self->debug;
     return;
   }
 }
 
-=head2 _normalize_fh_from_args (Path::Class::File|String|@Strings)
+=head2 _normalize_fh_from_args
 
-Given some args, return a $filehandle that is an open read filehandle object
+  my $fh = $storage->_normalize_fh_from_args(qw/share sql defaults.sql/);
+
+=over
+
+=item Arguments: (Path::Class::File|String|@Strings|Filehandle)
+
+=item Returns: A FileHandle
+
+=back
+
+Given arguments, return a $filehandle that is an open read filehandle object
 based on the args.  Accepts a L<Path::Class::File> object or arguments suitable
-for constructing one.
+for constructing one.  Also will passthru an exiting FileHandle as a sanity
+measure.
 
-Returns a filehandle whose end of line characters have been normalized to the
-running platform.
+Throws an exception if a read filehandle can't be created.
 
 =cut
 
@@ -1989,19 +2030,33 @@ sub _normalize_fh_from_args {
   }
 }
 
-=head2 _normalize_lines (@lines)
+=head2 _normalize_lines
 
-Given anes, will return an array of normalized lines statement that we
-can group into statements.  We do our best to strip out comment lines, blank
-lines and anything else that might cause an error.  We also split lines based
-on the ';' deliminator, since that's pretty standard.
+  my @lines = $storage->_normalize_lines(<$fh>);
+  my @lines = $storage->_normalize_lines(@unknown_lines);
 
+=over
+
+=item Arguments: (@Strings|Filehandle)
+
+=item Returns: An Array of Strings.
+
+=back
+
+Given an array of strings, as might come out of a sql script file or generated
+from a SQLT Producer, we normalize it for execution against the given storage
+engine.  We do our best to strip out comment lines, blank lines and anything 
+else that might cause an error.  We also split lines based on the ';' 
+deliminator, since that's pretty standard.
+
+The idea here is that you should get in clean array of strings.
+ 
 =cut
 
 sub _normalize_lines {
   my $self = shift @_;
   my $deliminator=qr{;|.$};
-  my $quote=qr{'|"};
+  my $quote=qr{['"]};
   my $quoted=qr{$quote.+?$quote};
   my $block=qr{$quoted|.};
   my $comment = qr{--};
@@ -2031,7 +2086,17 @@ sub _normalize_lines {
   return @lines;
 }
 
-=head2 _normalize_statements_from_lines (@lines)
+=head2 _normalize_statements_from_lines 
+
+  my @statements = $storage->_normalize_statements_from_lines(@lines)
+
+=over
+
+=item Arguments: Array of Strings
+
+=item Returns: Array of Array References
+
+=back
 
 Give an array of lines, group them into whole statements.  This is to handle
 how a given statement might have been broken across multiple lines
@@ -2040,7 +2105,9 @@ Returns an array of arrayrefs, where each item is an arrayref of statement
 'chunks'.  The idea here is to group statements but preserve the fact that
 an original raw read of a file split statements across multiple lines.  This
 is important since many database engines have limitations as to how many
-columns a line can span.
+columns a line can span.  Additionally, you may wish to write out the
+statements to a file or storage engine and wish to preserve readability
+by not having such lengthy lines.
 
 =cut
 
@@ -2057,6 +2124,12 @@ sub _normalize_statements_from_lines {
   }
   return @statements;  
 }
+
+=head1 DESTROY
+
+Make sure we properly clean up the object when it goes out of scope.
+
+=cut
 
 sub DESTROY {
   my $self = shift;
