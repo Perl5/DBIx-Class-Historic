@@ -2055,10 +2055,6 @@ The idea here is that you should get in clean array of strings.
 
 sub _normalize_lines {
   my $self = shift @_;
-  my $deliminator=qr{;|.$};
-  my $quote=qr{['"]};
-  my $quoted=qr{$quote.+?$quote};
-  my $block=qr{$quoted|.};
   my $comment = qr{--};
   my @lines;
   foreach my $line (@_) {
@@ -2068,14 +2064,14 @@ sub _normalize_lines {
       next;
     } else {
       ## a line may contain several commands
-      my @parts = ($line=~m/$block*?$deliminator/xg);
+      my @parts = $self->_split_line_into_statements($line);      
       ## clean empty or comment only lines
       @parts = grep { $_ && $_ !~m/^\s* $comment/x } @parts;
       ## We are going to wrap it all in a transaction anyway
       @parts = grep { $_ !~ /^(BEGIN|BEGIN TRANSACTION|COMMIT)/m } @parts;
       ## Some cleanup
       @parts = map {
-        $_=~s/$deliminator \s*?$comment.*?$//x; ## trim off ending comments        
+        $_=~s/;\s*?$comment.*?$//; ## trim off ending comments        
         $_=~s/^\s*//g; ## trim leading whitespace
         $_=~s/\s*$//g; ## trim ending whitespace
         $_;
@@ -2084,6 +2080,45 @@ sub _normalize_lines {
     }
   }
   return @lines;
+}
+
+=head2 _split_line_into_statements
+
+  my @statements = $storage->_split_line_into_statements($line);
+
+=over
+
+=item Arguments: String
+
+=item Returns: Array of SQL Statements
+
+=back 
+
+Given a string, returns all the individual SQL statements in that String
+as an Array.
+
+my $maybe_quoted = qr/
+"[^"]+"
+|
+'[^']+'
+|
+.+?(?=$deliminator)
+/;
+
+my @parts = ($line=~m/$maybe_quoted*?$deliminator/g);
+
+=cut
+
+sub _split_line_into_statements {
+  my ($self, $line) = @_;
+  
+  my $deliminator=qr{;|$};
+  my $quote=qr{['"]};
+  my $quoted=qr{$quote.+?$quote};
+  my $block=qr{$quoted|.};
+  my @parts = ($line=~m/$block*?$deliminator/xg);
+
+  return @parts;
 }
 
 =head2 _normalize_statements_from_lines 
