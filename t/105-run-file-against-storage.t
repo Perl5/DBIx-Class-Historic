@@ -1,5 +1,5 @@
 
-use Test::More tests => 12; 
+use Test::More tests => 16; 
 use Test::Exception;
 use lib qw(t/lib);
 
@@ -123,3 +123,20 @@ lives_ok {
 
 ok $schema->storage->run_file_against_storage(qw/t share simple.sql/), 'executed the simple';
 ok $schema->storage->run_file_against_storage(qw/t share killer.sql/), 'executed the killer';
+
+my $storage = $schema->storage;
+
+is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc")],["aaa;", "bbb;", "ccc", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements("aaa;'bb1;bb2';ccc")],["aaa;", "'bb1;bb2';", "ccc", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements(qq[aaa;"bb1;bb2";ccc])],["aaa;", '"bb1;bb2";', "ccc", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc;")],["aaa;", "bbb;", "ccc;", ""],
+ "Correctly split";
+
+use Data::Dump qw/dump/;
+warn dump $schema->storage->_split_line_into_statements_new("aaa;bbb;ccc");

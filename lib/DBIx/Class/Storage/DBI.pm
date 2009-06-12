@@ -2097,15 +2097,6 @@ sub _normalize_lines {
 Given a string, returns all the individual SQL statements in that String
 as an Array.
 
-my $maybe_quoted = qr/
-"[^"]+"
-|
-'[^']+'
-|
-.+?(?=$deliminator)
-/;
-
-my @parts = ($line=~m/$maybe_quoted*?$deliminator/g);
 
 =cut
 
@@ -2120,6 +2111,21 @@ sub _split_line_into_statements {
 
   return @parts;
 }
+
+sub _split_line_into_statements_new {
+  my ($self, $line) = @_;
+  my $deliminator=qr{;|$};
+  my $maybe_quoted = qr/
+    "[^"]+"
+    |
+    '[^']+'
+    |
+    .+?(?=$deliminator)
+  /;
+
+  return ($line=~m/$maybe_quoted*?$deliminator/g);
+}
+
 
 =head2 _normalize_statements_from_lines 
 
