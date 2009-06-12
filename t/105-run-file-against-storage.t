@@ -35,7 +35,7 @@ is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc;")],["aaa;", "bbb;
  "Correctly split";
 
 is_deeply [$storage->_split_line_into_statements("insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');")],
-  ["insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');"],
+  ["insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');",""],
   "Correctly split";
 
 ok my @lines = $storage->_normalize_lines(<$fh>), 'Got some lines';
@@ -142,5 +142,3 @@ lives_ok {
 ok $storage->run_file_against_storage(qw/t share simple.sql/), 'executed the simple';
 ok $storage->run_file_against_storage(qw/t share killer.sql/), 'executed the killer';
 
-use Data::Dump qw/dump/;
-warn dump $storage->_split_line_into_statements("insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');");

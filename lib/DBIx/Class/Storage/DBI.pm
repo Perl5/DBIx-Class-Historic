@@ -2097,7 +2097,6 @@ sub _normalize_lines {
 Given a string, returns all the individual SQL statements in that String
 as an Array.
 
-
 =cut
 
 sub _split_line_into_statements {
@@ -2108,12 +2107,11 @@ sub _split_line_into_statements {
     |
     '[^']+'
     |
-    .+?(?=$deliminator)
+    .+?(?=$deliminator|.)
   /x;
 
   return ($line=~m/$maybe_quoted*?$deliminator/g);
 }
-
 
 =head2 _normalize_statements_from_lines 
 
