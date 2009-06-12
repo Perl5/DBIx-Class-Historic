@@ -2071,9 +2071,9 @@ sub _normalize_lines {
       @parts = grep { $_ !~ /^(BEGIN|BEGIN TRANSACTION|COMMIT)/m } @parts;
       ## Some cleanup
       @parts = map {
-        $_=~s/;\s*?$comment.*?$//; ## trim off ending comments        
-        $_=~s/^\s*//g; ## trim leading whitespace
-        $_=~s/\s*$//g; ## trim ending whitespace
+        $_=~s/;\s*?$comment.*?$//m; ## trim off ending comments        
+        $_=~s/^\s*//mg; ## trim leading whitespace
+        $_=~s/\s*$//mg; ## trim ending whitespace
         $_;
       } @parts;
       push @lines, @parts;
@@ -2102,26 +2102,14 @@ as an Array.
 
 sub _split_line_into_statements {
   my ($self, $line) = @_;
-  
-  my $deliminator=qr{;|$};
-  my $quote=qr{['"]};
-  my $quoted=qr{$quote.+?$quote};
-  my $block=qr{$quoted|.};
-  my @parts = ($line=~m/$block*?$deliminator/xg);
-
-  return @parts;
-}
-
-sub _split_line_into_statements_new {
-  my ($self, $line) = @_;
-  my $deliminator=qr{;|$};
+  my $deliminator=qr/;|$/;
   my $maybe_quoted = qr/
     "[^"]+"
     |
     '[^']+'
     |
     .+?(?=$deliminator)
-  /;
+  /x;
 
   return ($line=~m/$maybe_quoted*?$deliminator/g);
 }

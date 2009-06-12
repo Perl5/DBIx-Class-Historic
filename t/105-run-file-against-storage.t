@@ -1,5 +1,5 @@
 
-use Test::More tests => 16; 
+use Test::More tests => 17; 
 use Test::Exception;
 use lib qw(t/lib);
 
@@ -20,7 +20,25 @@ throws_ok {
 ok my $fh = $schema->storage->_normalize_fh_from_args(qw/t share basic.sql/),
   'Got good filehandle';
 
-ok my @lines = $schema->storage->_normalize_lines(<$fh>), 'Got some lines';
+my $storage = $schema->storage;
+
+is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc")],["aaa;", "bbb;", "ccc", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements("aaa;'bb1;bb2';ccc")],["aaa;", "'bb1;bb2';", "ccc", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements(qq[aaa;"bb1;bb2";ccc])],["aaa;", '"bb1;bb2";', "ccc", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc;")],["aaa;", "bbb;", "ccc;", ""],
+ "Correctly split";
+
+is_deeply [$storage->_split_line_into_statements("insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');")],
+  ["insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');"],
+  "Correctly split";
+
+ok my @lines = $storage->_normalize_lines(<$fh>), 'Got some lines';
 
 is_deeply [@lines], [
   "CREATE TABLE cd_to_producer (",
@@ -59,7 +77,7 @@ is_deeply [@lines], [
   ");",	
 	], 'Got expected lines';
 
-ok my @statements = $schema->storage->_normalize_statements_from_lines(@lines),
+ok my @statements = $storage->_normalize_statements_from_lines(@lines),
    'Got Statements';
 
 is_deeply [@statements], [
@@ -118,25 +136,11 @@ is_deeply [@statements], [
 	], 'Got expect Lines';
 	
 lives_ok {
-	$schema->storage->_execute_single_statement('insert into artist( artistid,name) values( 777777,"--commented" );');
+	$storage->_execute_single_statement('insert into artist( artistid,name) values( 777777,"--commented" );');
 } 'executed statement';
 
-ok $schema->storage->run_file_against_storage(qw/t share simple.sql/), 'executed the simple';
-ok $schema->storage->run_file_against_storage(qw/t share killer.sql/), 'executed the killer';
-
-my $storage = $schema->storage;
-
-is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc")],["aaa;", "bbb;", "ccc", ""],
- "Correctly split";
-
-is_deeply [$storage->_split_line_into_statements("aaa;'bb1;bb2';ccc")],["aaa;", "'bb1;bb2';", "ccc", ""],
- "Correctly split";
-
-is_deeply [$storage->_split_line_into_statements(qq[aaa;"bb1;bb2";ccc])],["aaa;", '"bb1;bb2";', "ccc", ""],
- "Correctly split";
-
-is_deeply [$storage->_split_line_into_statements("aaa;bbb;ccc;")],["aaa;", "bbb;", "ccc;", ""],
- "Correctly split";
+ok $storage->run_file_against_storage(qw/t share simple.sql/), 'executed the simple';
+ok $storage->run_file_against_storage(qw/t share killer.sql/), 'executed the killer';
 
 use Data::Dump qw/dump/;
-warn dump $schema->storage->_split_line_into_statements_new("aaa;bbb;ccc");
+warn dump $storage->_split_line_into_statements("insert into artist(artistid,name) values(888888,'xxx;yyy;zzz');");
