@@ -31,6 +31,8 @@ my $build_requires = {
 };
 
 my $test_requires = {
+  'Test::Class'              => '0.33',
+
   'File::Temp'               => '0.22',
   'Test::Exception'          => '0.31',
   'Test::Warn'               => '0.21',
