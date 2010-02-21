@@ -11,7 +11,7 @@ better way?  You've come to the right place.
 =head1 THE DBIx::Class WAY
 
 Here are a few simple tips that will help you get your bearings with
-DBIx::Class.  
+DBIx::Class.
 
 =head2 Tables become Result classes
 
@@ -29,7 +29,7 @@ besides) The important thing to understand:
 =head2 It's all about the ResultSet
 
 So, we've got some ResultSources defined.  Now, we want to actually use those
-definitions to help us translate the queries we need into handy perl objects!  
+definitions to help us translate the queries we need into handy perl objects!
 
 Let's say we defined a ResultSource for an "album" table with three columns:
 "albumid", "artist", and "title".  Any time we want to query this table, we'll
@@ -39,18 +39,18 @@ results of:
   SELECT albumid, artist, title FROM album;
 
 Would be retrieved by creating a ResultSet object from the album table's
-ResultSource, likely by using the "search" method.  
+ResultSource, likely by using the "search" method.
 
 DBIx::Class doesn't limit you to creating only simple ResultSets -- if you
 wanted to do something like:
 
   SELECT title FROM album GROUP BY title;
 
-You could easily achieve it. 
+You could easily achieve it.
 
-The important thing to understand: 
+The important thing to understand:
 
-  Any time you would reach for a SQL query in DBI, you are 
+  Any time you would reach for a SQL query in DBI, you are
   creating a DBIx::Class::ResultSet.
 
 =head2 Search is like "prepare"
@@ -105,16 +105,14 @@ required resultset classes.
 Next, create each of the classes you want to load as specified above:
 
   package My::Schema::Result::Album;
-  use base qw/DBIx::Class/;
+  use base qw/DBIx::Class::Core/;
 
-Load any components required by each class with the load_components() method.
-This should consist of "Core" plus any additional components you want to use.
-For example, if you want serial/auto-incrementing primary keys:
+Load any additional components you may need with the load_components() method,
+and provide component configuration if required. For example, if you want
+automatic row ordering:
 
-  __PACKAGE__->load_components(qw/ PK::Auto Core /);
-
-C<PK::Auto> is supported for many databases; see L<DBIx::Class::Storage::DBI>
-for more information.
+  __PACKAGE__->load_components(qw/ Ordered /);
+  __PACKAGE__->position_column('rank');
 
 Set the table for your class:
 
@@ -122,7 +120,7 @@ Set the table for your class:
 
 Add columns to your class:
 
-  __PACKAGE__->add_columns(qw/ albumid artist title /);
+  __PACKAGE__->add_columns(qw/ albumid artist title rank /);
 
 Each column can also be set up with its own accessor, data_type and other pieces
 of information that it may be useful to have -- just pass C<add_columns> a hash:
@@ -142,9 +140,16 @@ of information that it may be useful to have -- just pass C<add_columns> a hash:
                               is_auto_increment => 0,
                               default_value => '',
                             },
-                          title  => 
+                          title  =>
                             { data_type => 'varchar',
                               size      => 256,
+                              is_nullable => 0,
+                              is_auto_increment => 0,
+                              default_value => '',
+                            },
+                          rank =>
+                            { data_type => 'integer',
+                              size      => 16,
                               is_nullable => 0,
                               is_auto_increment => 0,
                               default_value => '',
@@ -154,7 +159,7 @@ of information that it may be useful to have -- just pass C<add_columns> a hash:
 DBIx::Class doesn't directly use most of this data yet, but various related
 modules such as L<DBIx::Class::WebForm> make use of it. Also it allows you to
 create your database tables from your Schema, instead of the other way around.
-See L<SQL::Translator> for details.
+See L<DBIx::Class::Schema/deploy> for details.
 
 See L<DBIx::Class::ResultSource> for more details of the possible column
 attributes.
@@ -176,7 +181,8 @@ to describe a column which contains an ID of another Table, or C<has_many> to
 make a predefined accessor for fetching objects that contain this Table's
 foreign key:
 
-  __PACKAGE__->has_many('albums', 'My::Schema::Result::Artist', 'album_id');
+  # in My::Schema::Result::Artist
+  __PACKAGE__->has_many('albums', 'My::Schema::Result::Album', 'artist');
 
 See L<DBIx::Class::Relationship> for more information about the various types of
 available relationships and how you can design your own.
@@ -202,8 +208,12 @@ many options.
 
 =head2 Connecting
 
-To connect to your Schema, you need to provide the connection details.  The
-arguments are the same as for L<DBI/connect>:
+To connect to your Schema, you need to provide the connection details or a
+database handle.
+
+=head3 Via connection details
+
+The arguments are the same as for L<DBI/connect>:
 
   my $schema = My::Schema->connect('dbi:SQLite:/home/me/myapp/my.db');
 
@@ -215,7 +225,7 @@ second database you want to access:
 Note that L<DBIx::Class::Schema> does not cache connections for you. If you use
 multiple connections, you need to do this manually.
 
-To execute some sql statements on every connect you can add them as an option in
+To execute some SQL statements on every connect you can add them as an option in
 a special fifth argument to connect:
 
   my $another_schema = My::Schema->connect(
@@ -228,6 +238,16 @@ a special fifth argument to connect:
 
 See L<DBIx::Class::Schema::Storage::DBI/connect_info> for more information about
 this and other special C<connect>-time options.
+
+=head3 Via a database handle
+
+The supplied coderef is expected to return a single connected database handle
+(e.g. a L<DBI> C<$dbh>)
+
+  my $schema = My::Schema->connect (
+    sub { Some::DBH::Factory->connect },
+    \%extra_attrs,
+  );
 
 =head2 Basic usage
 
@@ -255,8 +275,8 @@ instead:
   $album->set_column('title', 'Presence');
   $title = $album->get_column('title');
 
-Just like with L<Class::DBI>, you call C<update> to commit your changes to the
-database:
+Just like with L<Class::DBI>, you call C<update> to save your changes to the
+database (by executing the actual C<UPDATE> statement):
 
   $album->update;
 
@@ -273,7 +293,7 @@ To create a new record in the database, you can use the C<create> method.  It
 returns an instance of C<My::Schema::Result::Album> that can be used to access the data
 in the new record:
 
-  my $new_album = $schema->resultset('Album')->create({ 
+  my $new_album = $schema->resultset('Album')->create({
     title  => 'Wish You Were Here',
     artist => 'Pink Floyd'
   });

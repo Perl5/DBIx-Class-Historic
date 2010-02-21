@@ -58,7 +58,7 @@ sub delete {
 
 sub insert {
     my $self = shift;
- 
+
     # cache our file columns so we can write them to the fs
     # -after- we have a PK
     my %file_column;
@@ -113,8 +113,10 @@ DBIx::Class::InflateColumn::File -  map files from the Database to the filesyste
 
 In your L<DBIx::Class> table class:
 
-    __PACKAGE__->load_components( "PK::Auto", "InflateColumn::File", "Core" );
-    
+    use base 'DBIx::Class::Core';
+
+    __PACKAGE__->load_components(qw/InflateColumn::File/);
+
     # define your columns
     __PACKAGE__->add_columns(
         "id",
@@ -136,7 +138,7 @@ In your L<DBIx::Class> table class:
             size                => 255,
         },
     );
-    
+
 
 In your L<Catalyst::Controller> class:
 
@@ -152,15 +154,15 @@ name as name.
         body => '....'
     });
     $c->stash->{entry}=$entry;
-    
+
 
 And Place the following in your TT template
-    
+
     Article Subject: [% entry.subject %]
     Uploaded File: 
     <a href="/static/files/[% entry.id %]/[% entry.filename.filename %]">File</a>
     Body: [% entry.body %]
-    
+
 The file will be stored on the filesystem for later retrieval.  Calling delete
 on your resultset will delete the file from the filesystem.  Retrevial of the
 record automatically inflates the column back to the set hash with the
@@ -174,7 +176,7 @@ InflateColumn::File
 
 =head2 _file_column_callback ($file,$ret,$target)
 
-method made to be overridden for callback purposes.
+Method made to be overridden for callback purposes.
 
 =cut
 

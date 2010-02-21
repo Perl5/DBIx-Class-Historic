@@ -10,7 +10,7 @@ DBIx::Class::CDBICompat::Iterator - Emulates the extra behaviors of the Class::D
 
 =head1 SYNOPSIS
 
-See DBIx::Class::CDBICompat for directions for use.
+See DBIx::Class::CDBICompat for usage directions.
 
 =head1 DESCRIPTION
 
@@ -25,7 +25,7 @@ The CDBI iterator returns true if there were any results, false otherwise.  The 
 
 sub _init_result_source_instance {
   my $class = shift;
-  
+
   my $table = $class->next::method(@_);
   $table->resultset_class("DBIx::Class::CDBICompat::Iterator::ResultSet");
 

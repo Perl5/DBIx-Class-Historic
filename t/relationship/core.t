@@ -5,10 +5,10 @@ use Test::More;
 use Test::Exception;
 use lib qw(t/lib);
 use DBICTest;
+use DBIC::SqlMakerTest;
 
 my $schema = DBICTest->init_schema();
-
-plan tests => 78;
+my $sdebug = $schema->storage->debug;
 
 # has_a test
 my $cd = $schema->resultset("CD")->find(4);
@@ -40,8 +40,8 @@ if ($INC{'DBICTest/HelperRels.pm'}) {
       year => 2005,
   } );
 
- SKIP:{
-    skip "Can't fix right now", 1 if $DBIx::Class::VERSION < 0.09;
+ TODO: {
+    local $TODO = "Can't fix right now" if $DBIx::Class::VERSION < 0.09;
     lives_ok { $big_flop->genre} "Don't throw exception when col is not loaded after insert";
   };
 }
@@ -57,7 +57,7 @@ is( $big_flop_cd->title, 'Big Flop', 'create_related ok' );
   is($queries, 0, 'No SELECT made for belongs_to if key IS NULL');
   $big_flop_cd->genre_inefficient; #should trigger a select query
   is($queries, 1, 'SELECT made for belongs_to if key IS NULL when undef_on_null_fk disabled');
-  $schema->storage->debug(0);
+  $schema->storage->debug($sdebug);
   $schema->storage->debugcb(undef);
 }
 
@@ -133,7 +133,7 @@ $cd = $artist->find_or_new_related( 'cds', {
   year => 2007,
 } );
 is( $cd->title, 'Greatest Hits 2: Louder Than Ever', 'find_or_new_related new record ok' );
-ok( ! $cd->in_storage, 'find_or_new_related on a new record: not in_storage' );
+is( $cd->in_storage, 0, 'find_or_new_related on a new record: not in_storage' );
 
 $cd->artist(undef);
 my $newartist = $cd->find_or_new_related( 'artist', {
@@ -259,8 +259,22 @@ is($def_artist_cd->has_column_loaded('artist'), 1, 'FK loaded');
 is($def_artist_cd->search_related('artist')->count, 0, 'closed search on null FK');
 
 # test undirected many-to-many relationship (e.g. "related artists")
-my $undir_maps = $schema->resultset("Artist")->find(1)->artist_undirected_maps;
+my $undir_maps = $schema->resultset("Artist")
+                          ->search ({artistid => 1})
+                            ->search_related ('artist_undirected_maps');
 is($undir_maps->count, 1, 'found 1 undirected map for artist 1');
+is_same_sql_bind (
+  $undir_maps->as_query,
+  '(
+    SELECT artist_undirected_maps.id1, artist_undirected_maps.id2
+      FROM artist me
+      JOIN artist_undirected_map artist_undirected_maps
+        ON artist_undirected_maps.id1 = me.artistid OR artist_undirected_maps.id2 = me.artistid
+    WHERE ( artistid = ? )
+  )',
+  [[artistid => 1]],
+  'expected join sql produced',
+);
 
 $undir_maps = $schema->resultset("Artist")->find(2)->artist_undirected_maps;
 is($undir_maps->count, 1, 'found 1 undirected map for artist 2');
@@ -275,11 +289,11 @@ my $searched = $mapped_rs->search({'mapped_artists.artistid' => {'!=', undef}});
 
 cmp_ok($searched->count, '==', 2, "Both artist returned from map after adding another condition");
 
-# check join through cascaded has_many relationships
+# check join through cascaded has_many relationships (also empty has_many rels)
 $artist = $schema->resultset("Artist")->find(1);
 my $trackset = $artist->cds->search_related('tracks');
-# LEFT join means we also see the trackless additional album...
-cmp_ok($trackset->count, '==', 11, "Correct number of tracks for artist");
+is($trackset->count, 10, "Correct number of tracks for artist");
+is($trackset->all, 10, "Correct number of track objects for artist");
 
 # now see about updating eveything that belongs to artist 2 to artist 3
 $artist = $schema->resultset("Artist")->find(2);
@@ -309,3 +323,5 @@ is($cds->count, 1, "subjoins under left joins force_left (arrayref)");
 
 $cds = $schema->resultset("CD")->search({ 'me.cdid' => 5 }, { join => { single_track => { cd => {} } } });
 is($cds->count, 1, "subjoins under left joins force_left (hashref)");
+
+done_testing;

@@ -1,17 +1,16 @@
 use strict;
-use warnings;  
+use warnings;
 
 use Test::More;
 use Test::Exception;
+use Test::Warn;
 use lib qw(t/lib);
 use DBICTest;
 use DBIC::SqlMakerTest;
 
 my $schema = DBICTest->init_schema();
 
-plan tests => 106;
-
-eval { require DateTime::Format::MySQL };
+eval { require DateTime::Format::SQLite };
 my $NO_DTFM = $@ ? 1 : 0;
 
 my @art = $schema->resultset("Artist")->search({ }, { order_by => 'name DESC'});
@@ -37,10 +36,10 @@ ok($art->update, 'Update run');
 my %not_dirty = $art->get_dirty_columns();
 is(scalar(keys(%not_dirty)), 0, 'Nothing is dirty');
 
-eval {
+throws_ok ( sub {
   my $ret = $art->make_column_dirty('name2');
-};
-ok(defined($@), 'Failed to make non-existent column dirty');
+}, qr/No such column 'name2'/, 'Failed to make non-existent column dirty');
+
 $art->make_column_dirty('name');
 my %fake_dirty = $art->get_dirty_columns();
 is(scalar(keys(%fake_dirty)), 1, '1 fake dirty column');
@@ -66,7 +65,7 @@ lives_ok (sub { $art->delete }, 'Cascading delete on Ordered has_many works' ); 
 
 is(@art, 2, 'And then there were two');
 
-ok(!$art->in_storage, "It knows it's dead");
+is($art->in_storage, 0, "It knows it's dead");
 
 dies_ok ( sub { $art->delete }, "Can't delete twice");
 
@@ -106,6 +105,19 @@ is($new_again->name, 'Man With A Spoon', 'Retrieved correctly');
 
 is($new_again->ID, 'DBICTest::Artist|artist|artistid=4', 'unique object id generated correctly');
 
+# test that store_column is called once for create() for non sequence columns 
+{
+  ok(my $artist = $schema->resultset('Artist')->create({name => 'store_column test'}));
+  is($artist->name, 'X store_column test'); # used to be 'X X store...'
+
+  # call store_column even though the column doesn't seem to be dirty
+  $artist->name($artist->name);
+  is($artist->name, 'X X store_column test');
+  ok($artist->is_column_changed('name'), 'changed column marked as dirty');
+
+  $artist->delete;
+}
+
 # Test backwards compatibility
 {
   my $warnings = '';
@@ -134,7 +146,7 @@ is($schema->resultset("Artist")->count, 4, 'count ok');
   });
 
   is($new_obj->name, 'find_or_new', 'find_or_new: instantiated a new artist');
-  ok(! $new_obj->in_storage, 'new artist is not in storage');
+  is($new_obj->in_storage, 0, 'new artist is not in storage');
 }
 
 my $cd = $schema->resultset("CD")->find(1);
@@ -195,7 +207,7 @@ is( $schema->resultset("Track")->find(100)->title, 'Insert or Update - updated',
 
 # get_inflated_columns w/relation and accessor alias
 SKIP: {
-    skip "This test requires DateTime::Format::MySQL", 8 if $NO_DTFM;
+    skip "This test requires DateTime::Format::SQLite", 8 if $NO_DTFM;
 
     isa_ok($new->updated_date, 'DateTime', 'have inflated object via accessor');
     my %tdata = $new->get_inflated_columns;
@@ -212,9 +224,9 @@ SKIP: {
     isa_ok($tdata{'last_updated_on'}, 'DateTime', 'inflated accessored column');
 }
 
-eval { $schema->class("Track")->load_components('DoesNotExist'); };
-
-ok $@, $@;
+throws_ok (sub {
+  $schema->class("Track")->load_components('DoesNotExist');
+}, qr!Can't locate DBIx/Class/DoesNotExist.pm!, 'exception on nonexisting component');
 
 is($schema->class("Artist")->field_name_for->{name}, 'artist name', 'mk_classdata usage ok');
 
@@ -229,19 +241,12 @@ my $collapsed_or_rs = $or_rs->search ({}, { distinct => 1 }); # induce collapse
 is ($collapsed_or_rs->all, 4, 'Collapsed joined search with OR returned correct number of rows');
 is ($collapsed_or_rs->count, 4, 'Collapsed search count with OR ok');
 
-my $pref_or_rs = $collapsed_or_rs->search ({}, { prefetch => [qw/tags/] });
-is_same_sql_bind (
-  $pref_or_rs->as_query,
-  '(SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track, tags.tagid, tags.cd, tags.tag FROM cd me LEFT JOIN tags tags ON tags.cd = me.cdid WHERE ( ( tags.tag = ? OR tags.tag = ? ) ) GROUP BY me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track, tags.tagid, tags.cd, tags.tag ORDER BY cdid, tags.cd, tags.tag)',
-  [
-    [ 'tags.tag' => 'Cheesy' ],
-    [ 'tags.tag' => 'Blue' ],
-  ],
-  'Prefetch + distinct resulted in correct group_by',
-);
-is ($pref_or_rs->all, 4, 'Prefetched grouped search with OR returned correct number of rows');
-is ($pref_or_rs->count, 4, 'Prefetched grouped count with OR ok');
-
+# make sure sure distinct on a grouped rs is warned about
+my $cd_rs = $schema->resultset ('CD')
+              ->search ({}, { distinct => 1, group_by => 'title' });
+warnings_exist (sub {
+  $cd_rs->next;
+}, qr/Useless use of distinct/, 'UUoD warning');
 
 {
   my $tcount = $schema->resultset('Track')->search(
@@ -389,7 +394,7 @@ lives_ok (sub { my $newlink = $newbook->link}, "stringify to false value doesn't
 
 # test get_inflated_columns with objects
 SKIP: {
-    skip "This test requires DateTime::Format::MySQL", 5 if $NO_DTFM;
+    skip "This test requires DateTime::Format::SQLite", 5 if $NO_DTFM;
     my $event = $schema->resultset('Event')->search->first;
     my %edata = $event->get_inflated_columns;
     is($edata{'id'}, $event->id, 'got id');
@@ -416,9 +421,58 @@ SKIP: {
 
 # make sure we got rid of the compat shims
 SKIP: {
-    skip "Remove in 0.09", 5 if $DBIx::Class::VERSION < 0.09;
+    skip "Remove in 0.082", 3 if $DBIx::Class::VERSION < 0.082;
 
-    for (qw/compare_relationship_keys pk_depends_on resolve_condition resolve_join resolve_prefetch/) {
+    for (qw/compare_relationship_keys pk_depends_on resolve_condition/) {
       ok (! DBIx::Class::ResultSource->can ($_), "$_ no longer provided by DBIx::Class::ResultSource");
     }
 }
+
+#------------------------------
+# READ THIS BEFORE "FIXING"
+#------------------------------
+#
+# make sure we got rid of discard_changes mess - this is a mess and a source
+# of great confusion. Here I simply die if the methods are available, which
+# is wrong on its own (we *have* to provide some sort of back-compat, even
+# if with warnings). Here is how I envision things should actually be. Also
+# note that a lot of the deprecation can be started today (i.e. the switch
+# from get_from_storage to copy_from_storage). So:
+#
+# $row->discard_changes =>
+#   warning, and delegation to reload_from_storage
+#
+# $row->reload_from_storage =>
+#   does what discard changes did in 0.08 - issues a query to the db
+#   and repopulates all column slots, regardless of dirty states etc.
+#
+# $row->revert_changes =>
+#   does what discard_changes should have done initially (before it became
+#   a dual-purpose call). In order to make this work we will have to
+#   augment $row to carry its own initial-state, much like svn has a
+#   copy of the current checkout in contrast to cvs.
+#
+# my $db_row = $row->get_from_storage =>
+#   warns and delegates to an improved name copy_from_storage, with the
+#   same semantics
+#
+# my $db_row = $row->copy_from_storage =>
+#   a much better/descriptive name than get_from_storage
+#
+#------------------------------
+# READ THIS BEFORE "FIXING"
+#------------------------------
+#
+SKIP: {
+    skip "Something needs to be done before 0.09", 2 if $DBIx::Class::VERSION < 0.09;
+
+    my $row = $schema->resultset ('Artist')->next;
+
+    for (qw/discard_changes get_from_storage/) {
+      ok (! $row->can ($_), "$_ needs *some* sort of facelift before 0.09 ships - current state of affairs is unacceptable");
+    }
+}
+
+throws_ok { $schema->resultset} qr/resultset\(\) expects a source name/, 'resultset with no argument throws exception';
+
+done_testing;

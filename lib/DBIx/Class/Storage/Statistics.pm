@@ -2,7 +2,7 @@ package DBIx::Class::Storage::Statistics;
 use strict;
 use warnings;
 
-use base qw/Class::Accessor::Grouped/;
+use base qw/DBIx::Class/;
 use IO::File;
 
 __PACKAGE__->mk_group_accessors(simple => qw/callback debugfh silence/);
@@ -16,7 +16,7 @@ DBIx::Class::Storage::Statistics - SQL Statistics
 =head1 DESCRIPTION
 
 This class is called by DBIx::Class::Storage::DBI as a means of collecting
-statistics on it's actions.  Using this class alone merely prints the SQL
+statistics on its actions.  Using this class alone merely prints the SQL
 executed, the fact that it completes and begin/end notification for
 transactions.
 

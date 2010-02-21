@@ -1,18 +1,13 @@
 use strict;
-use warnings FATAL => 'all';
+use warnings;
 
 use Test::More;
-
-BEGIN {
-    eval "use SQL::Abstract 1.49";
-    plan $@
-        ? ( skip_all => "Needs SQLA 1.49+" )
-        : ( tests => 8 );
-}
 
 use lib qw(t/lib);
 use DBICTest;
 use DBIC::SqlMakerTest;
+
+plan tests => 8;
 
 my $schema = DBICTest->init_schema();
 my $art_rs = $schema->resultset('Artist');
@@ -25,7 +20,7 @@ my $cdrs = $schema->resultset('CD');
 
   is_same_sql_bind(
     $cdrs2->as_query,
-    "(SELECT me.cdid,me.artist,me.title,me.year,me.genreid,me.single_track FROM cd me WHERE artist_id IN ( SELECT id FROM artist me LIMIT 1 ))",
+    "(SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track FROM cd me WHERE artist_id IN ( SELECT id FROM artist me LIMIT 1 ))",
     [],
   );
 }
@@ -78,7 +73,9 @@ my $cdrs = $schema->resultset('CD');
 
   is_same_sql_bind(
     $rs->as_query,
-    "(SELECT cd2.cdid, cd2.artist, cd2.title, cd2.year, cd2.genreid, cd2.single_track FROM (SELECT me.cdid,me.artist,me.title,me.year,me.genreid,me.single_track FROM cd me WHERE ( id > ? ) ) cd2)",
+    "(SELECT cd2.cdid, cd2.artist, cd2.title, cd2.year, cd2.genreid, cd2.single_track FROM (
+        SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track FROM cd me WHERE ( id > ? )
+     ) cd2)",
     [
       [ 'id', 20 ]
     ],
@@ -124,11 +121,11 @@ my $cdrs = $schema->resultset('CD');
 
   is_same_sql_bind(
     $rs->as_query,
-    "(SELECT cd2.cdid, cd2.artist, cd2.title, cd2.year, cd2.genreid, cd2.single_track 
-      FROM 
-        (SELECT cd3.cdid,cd3.artist,cd3.title,cd3.year,cd3.genreid,cd3.single_track 
-          FROM 
-            (SELECT me.cdid,me.artist,me.title,me.year,me.genreid,me.single_track 
+    "(SELECT cd2.cdid, cd2.artist, cd2.title, cd2.year, cd2.genreid, cd2.single_track
+      FROM
+        (SELECT cd3.cdid, cd3.artist, cd3.title, cd3.year, cd3.genreid, cd3.single_track
+          FROM
+            (SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track
               FROM cd me WHERE ( id < ? ) ) cd3
           WHERE ( id > ? ) ) cd2)",
     [
@@ -168,7 +165,9 @@ my $cdrs = $schema->resultset('CD');
 
   is_same_sql_bind(
     $rs->as_query,
-    "(SELECT cd2.cdid, cd2.artist, cd2.title, cd2.year, cd2.genreid, cd2.single_track FROM (SELECT me.cdid,me.artist,me.title,me.year,me.genreid,me.single_track FROM cd me WHERE ( title = ? ) ) cd2)",
+    "(SELECT cd2.cdid, cd2.artist, cd2.title, cd2.year, cd2.genreid, cd2.single_track FROM (
+        SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track FROM cd me WHERE ( title = ? )
+     ) cd2)",
     [ [ 'title', 'Thriller' ] ],
   );
 }

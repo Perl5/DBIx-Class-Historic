@@ -14,7 +14,7 @@ __PACKAGE__->add_columns(
     data_type => 'integer',
   },
   'position' => {
-    data_type => 'integer',
+    data_type => 'int',
     accessor => 'pos',
   },
   'title' => {
@@ -28,6 +28,10 @@ __PACKAGE__->add_columns(
   },
   last_updated_at => {
     data_type => 'datetime',
+    is_nullable => 1
+  },
+  small_dt => { # for mssql and sybase DT tests
+    data_type => 'smalldatetime',
     is_nullable => 1
   },
 );
@@ -45,5 +49,18 @@ __PACKAGE__->belongs_to( disc => 'DBICTest::Schema::CD' => 'cd');
 
 __PACKAGE__->might_have( cd_single => 'DBICTest::Schema::CD', 'single_track' );
 __PACKAGE__->might_have( lyrics => 'DBICTest::Schema::Lyrics', 'track_id' );
+
+__PACKAGE__->belongs_to(
+    "year1999cd",
+    "DBICTest::Schema::Year1999CDs",
+    { "foreign.cdid" => "self.cd" },
+    { join_type => 'left' },  # the relationship is of course optional
+);
+__PACKAGE__->belongs_to(
+    "year2000cd",
+    "DBICTest::Schema::Year2000CDs",
+    { "foreign.cdid" => "self.cd" },
+    { join_type => 'left' },
+);
 
 1;

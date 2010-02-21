@@ -3,7 +3,10 @@ package # hide from PAUSE
 
 use base qw/DBICTest::BaseResult/;
 
-__PACKAGE__->table('cd');
+# this tests table name as scalar ref
+# DO NOT REMOVE THE \
+__PACKAGE__->table(\'cd');
+
 __PACKAGE__->add_columns(
   'cdid' => {
     data_type => 'integer',
@@ -23,6 +26,7 @@ __PACKAGE__->add_columns(
   'genreid' => { 
     data_type => 'integer',
     is_nullable => 1,
+    accessor => undef,
   },
   'single_track' => {
     data_type => 'integer',
@@ -56,6 +60,7 @@ __PACKAGE__->might_have(
     { proxy => [ qw/notes/ ] },
 );
 __PACKAGE__->might_have(artwork => 'DBICTest::Schema::Artwork', 'cd_id');
+__PACKAGE__->has_one(mandatory_artwork => 'DBICTest::Schema::Artwork', 'cd_id');
 
 __PACKAGE__->many_to_many( producers => cd_to_producer => 'producer' );
 __PACKAGE__->many_to_many(

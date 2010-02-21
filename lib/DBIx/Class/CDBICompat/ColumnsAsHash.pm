@@ -11,7 +11,7 @@ DBIx::Class::CDBICompat::ColumnsAsHash - Emulates the behavior of Class::DBI whe
 
 =head1 SYNOPSIS
 
-See DBIx::Class::CDBICompat for directions for use.
+See DBIx::Class::CDBICompat for usage directions.
 
 =head1 DESCRIPTION
 
@@ -39,16 +39,16 @@ sub inflate_result {
     my $class = shift;
 
     my $new = $class->next::method(@_);
-    
+
     $new->_make_columns_as_hash;
-    
+
     return $new;
 }
 
 
 sub _make_columns_as_hash {
     my $self = shift;
-    
+
     for my $col ($self->columns) {
         if( exists $self->{$col} ) {
             warn "Skipping mapping $col to a hash key because it exists";

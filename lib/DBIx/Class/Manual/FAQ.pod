@@ -26,8 +26,7 @@ need to do is to install L<DBD::SQLite> from CPAN, and it's usable).
 
 Next, spend some time defining which data you need to store, and how
 it relates to the other data you have. For some help on normalisation,
-go to L<http://b62.tripod.com/doc/dbbase.htm> or
-L<http://209.197.234.36/db/simple.html>.
+go to L<http://b62.tripod.com/doc/dbbase.htm>.
 
 Now, decide whether you want to have the database itself be the
 definitive source of information about the data layout, or your
@@ -87,7 +86,7 @@ as part of the name, and make sure you give the one user you are going
 to connect with rights to read/write all the schemas/tables as
 necessary.
 
-=back 
+=back
 
 =head2 Relationships
 
@@ -112,7 +111,7 @@ for details.
 Create a C<belongs_to> relationship for the field containing the
 foreign key.  See L<DBIx::Class::Relationship/belongs_to>.
 
-=item .. define a foreign key relationship where the key field may contain NULL?  
+=item .. define a foreign key relationship where the key field may contain NULL?
 
 Just create a C<belongs_to> relationship, as above. If the column is
 NULL then the inflation to the foreign object will not happen. This
@@ -217,10 +216,10 @@ values to filter them by, for example:
 
  ->search({'created_time' => { '>=', '2006-06-01 00:00:00' } })
 
-Note that to use a function here you need to make the whole value into
-a scalar reference:
+Note that to use a function here you need to make it a scalar
+reference:
 
- ->search({'created_time' => \'>= yesterday()' })
+ ->search({'created_time' => { '>=', \'yesterday()' } })
 
 =item .. search in several tables simultaneously?
 
@@ -244,33 +243,17 @@ database, and using that as your source. A C<view> is a stored SQL
 query, which can be accessed similarly to a table, see your database
 documentation for details.
 
-=item .. search using greater-than or less-than and database functions?
-
-To use functions or literal SQL with conditions other than equality
-you need to supply the entire condition, for example:
-
- my $interval = "< now() - interval '12 hours'";
- ->search({last_attempt => \$interval})
-
-and not:
-
- my $interval = "now() - interval '12 hours'";
- ->search({last_attempt => { '<' => \$interval } })
-
 =item .. search with an SQL function on the left hand side?
 
 To use an SQL function on the left hand side of a comparison:
 
- ->search({}, { where => \'YEAR(date_of_birth)=1979' });
+ ->search({ -nest => \[ 'YEAR(date_of_birth) = ?', [ plain_value => 1979 ] ] });
 
-=begin hidden
-
-(When the bind arg ordering bug is fixed, the previous example can be
-replaced with the following.)
-
- ->search({}, { where => \'YEAR(date_of_birth)=?', bind => [ 1979 ] });
-
-=end hidden
+Note: the C<plain_value> string in the C<< [ plain_value => 1979 ] >> part
+should be either the same as the name of the column (do this if the type of the
+return value of the function is the same as the type of the column) or
+otherwise it's essentially a dummy string currently (use C<plain_value> as a
+habit). It is used by L<DBIx::Class> to handle special column types.
 
 Or, if you have quoting off:
 
@@ -307,8 +290,8 @@ See the prefetch examples in the L<Cookbook|DBIx::Class::Manual::Cookbook>.
 
 =item .. fetch a whole column of data instead of a row?
 
-Call C<get_column> on a L<DBIx::Class::ResultSet>, this returns a
-L<DBIx::Class::ResultSetColumn>, see it's documentation and the
+Call C<get_column> on a L<DBIx::Class::ResultSet>. This returns a
+L<DBIx::Class::ResultSetColumn>. See its documentation and the
 L<Cookbook|DBIx::Class::Manual::Cookbook> for details.
 
 =item .. fetch a formatted column?
@@ -324,22 +307,17 @@ See the Cookbook for more details.
 
 =item .. fetch a single (or topmost) row?
 
-Sometimes you many only want a single record back from a search. A quick
-way to get that single row is to first run your search as usual:
+See L<DBIx::Class::Manual::Cookbook/Retrieve_one_and_only_one_row_from_a_resultset>.
 
-  ->search->(undef, { order_by => "id DESC" })
-
-Then call L<DBIx::Class::ResultSet/slice> and ask it only to return 1 row:
-
-  ->slice(0)
-
-These two calls can be combined into a single statement:
+A less readable way is to ask a regular search to return 1 row, using
+L<DBIx::Class::ResultSet/slice>:
 
   ->search->(undef, { order_by => "id DESC" })->slice(0)
 
-Why slice instead of L<DBIx::Class::ResultSet/first> or L<DBIx::Class::ResultSet/single>?
-If supported by the database, slice will use LIMIT/OFFSET to hint to the database that we
-really only need one row. This can result in a significant speed improvement.
+which (if supported by the database) will use LIMIT/OFFSET to hint to the
+database that we really only need one row. This can result in a significant
+speed improvement. The method using L<DBIx::Class::ResultSet/single> mentioned
+in the cookbook can do the same if you pass a C<rows> attribute to the search.
 
 =item .. refresh a row from storage?
 
@@ -393,6 +371,9 @@ C<column_info> supplied with C<add_columns>.
 
 =item .. insert many rows of data efficiently?
 
+The C<populate> method in L<DBIx::Class::ResultSet> provides
+efficient bulk inserts.
+
 =item .. update a collection of rows at the same time?
 
 Create a resultset using a search, to filter the rows of data you
@@ -410,17 +391,17 @@ scalar reference:
 
 But note that when using a scalar reference the column in the database
 will be updated but when you read the value from the object with e.g.
- 
+
  ->somecolumn()
- 
+
 you still get back the scalar reference to the string, B<not> the new
 value in the database. To get that you must refresh the row from storage
 using C<discard_changes()>. Or chain your function calls like this:
 
   ->update->discard_changes
- 
- to update the database and refresh the object in one step.
- 
+
+to update the database and refresh the object in one step.
+
 =item .. store JSON/YAML in a column and have it deflate/inflate automatically?
 
 You can use L<DBIx::Class::InflateColumn> to accomplish YAML/JSON storage transparently.
@@ -452,6 +433,38 @@ data out.
 
 =back
 
+=head2 Custom methods in Result classes
+
+You can add custom methods that do arbitrary things, even to unrelated tables. 
+For example, to provide a C<< $book->foo() >> method which searches the 
+cd table, you'd could add this to Book.pm:
+
+  sub foo {
+    my ($self, $col_data) = @_;
+    return $self->result_source->schema->resultset('cd')->search($col_data);
+  }
+
+And invoke that on any Book Result object like so:
+
+  my $rs = $book->foo({ title => 'Down to Earth' });
+
+When two tables ARE related, L<DBIx::Class::Relationship::Base> provides many
+methods to find or create data in related tables for you. But if you want to
+write your own methods, you can.
+
+For example, to provide a C<< $book->foo() >> method to manually implement
+what create_related() from L<DBIx::Class::Relationship::Base> does, you could 
+add this to Book.pm:
+
+  sub foo {
+    my ($self, $relname, $col_data) = @_;
+    return $self->related_resultset($relname)->create($col_data);
+  }
+
+Invoked like this:
+
+  my $author = $book->foo('author', { name => 'Fred' });
+
 =head2 Misc
 
 =over 4
@@ -474,7 +487,7 @@ An another method is to use L<Moose> with your L<DBIx::Class> package.
 	package MyTable;
 
 	use Moose; # import Moose
-	use Moose::Util::TypeConstraint; # import Moose accessor type constraints 
+	use Moose::Util::TypeConstraint; # import Moose accessor type constraints
 
 	extends 'DBIx::Class'; # Moose changes the way we define our parent (base) package
 
@@ -486,7 +499,7 @@ With either of these methods the resulting use of the accesssor would be
 
 	my $row;
 
-	# assume that some where in here $row will get assigned to a MyTable row
+	# assume that somewhere in here $row will get assigned to a MyTable row
 
 	$row->non_column_data('some string'); # would set the non_column_data accessor
 
@@ -494,7 +507,7 @@ With either of these methods the resulting use of the accesssor would be
 
 	$row->update(); # would not inline the non_column_data accessor into the update
 
-	
+
 =item How do I use DBIx::Class objects in my TT templates?
 
 Like normal objects, mostly. However you need to watch out for TT
@@ -536,9 +549,68 @@ Look at the tips in L<DBIx::Class::Manual::Cookbook/"STARTUP SPEED">
 =item How do I reduce the overhead of database queries?
 
 You can reduce the overhead of object creation within L<DBIx::Class>
-using the tips in L<DBIx::Class::Manual::Cookbook/"Skip row object creation for faster results"> 
+using the tips in L<DBIx::Class::Manual::Cookbook/"Skip row object creation for faster results">
 and L<DBIx::Class::Manual::Cookbook/"Get raw data for blindingly fast results">
 
+=item How do I override a run time method (e.g. a relationship accessor)?
+
+If you need access to the original accessor, then you must "wrap around" the original method.
+You can do that either with L<Moose::Manual::MethodModifiers> or L<Class::Method::Modifiers>.
+The code example works for both modules:
+
+    package Your::Schema::Group;
+    use Class::Method::Modifiers;
+    
+    # ... declare columns ...
+    
+    __PACKAGE__->has_many('group_servers', 'Your::Schema::GroupServer', 'group_id');
+    __PACKAGE__->many_to_many('servers', 'group_servers', 'server');
+    
+    # if the server group is a "super group", then return all servers
+    # otherwise return only servers that belongs to the given group
+    around 'servers' => sub {
+        my $orig = shift;
+        my $self = shift;
+
+        return $self->$orig(@_) unless $self->is_super_group;
+        return $self->result_source->schema->resultset('Server')->all;
+    };
+
+If you just want to override the original method, and don't care about the data
+from the original accessor, then you have two options. Either use
+L<Method::Signatures::Simple> that does most of the work for you, or do
+it the "dirty way".
+
+L<Method::Signatures::Simple> way:
+
+    package Your::Schema::Group;
+    use Method::Signatures::Simple;
+    
+    # ... declare columns ...
+    
+    __PACKAGE__->has_many('group_servers', 'Your::Schema::GroupServer', 'group_id');
+    __PACKAGE__->many_to_many('servers', 'group_servers', 'server');
+    
+    # The method keyword automatically injects the annoying my $self = shift; for you.
+    method servers {
+        return $self->result_source->schema->resultset('Server')->search({ ... });
+    }
+
+The dirty way:
+
+    package Your::Schema::Group;
+    use Sub::Name;
+    
+    # ... declare columns ...
+    
+    __PACKAGE__->has_many('group_servers', 'Your::Schema::GroupServer', 'group_id');
+    __PACKAGE__->many_to_many('servers', 'group_servers', 'server');
+    
+    *servers = subname servers => sub {
+        my $self = shift;
+        return $self->result_source->schema->resultset('Server')->search({ ... });
+    };
+    
 =back
 
 =head2 Notes for CDBI users
@@ -569,7 +641,7 @@ Likely you have/had two copies of postgresql installed simultaneously, the
 second one will use a default port of 5433, while L<DBD::Pg> is compiled with a
 default port of 5432.
 
-You can chance the port setting in C<postgresql.conf>.
+You can change the port setting in C<postgresql.conf>.
 
 =item I've lost or forgotten my mysql password
 

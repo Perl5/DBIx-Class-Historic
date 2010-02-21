@@ -2,8 +2,10 @@ package DBIx::Class::Storage::DBI::ODBC::ACCESS;
 use strict;
 use warnings;
 
-use DBI;
 use base qw/DBIx::Class::Storage::DBI/;
+use mro 'c3';
+
+use DBI;
 
 my $ERR_MSG_START = __PACKAGE__ . ' failed: ';
 
@@ -38,11 +40,11 @@ sub last_insert_id {
 
 sub bind_attribute_by_data_type {
     my $self = shift;
-    
+
     my ( $data_type ) = @_;
-    
+
     return { TYPE => $data_type } if $data_type == DBI::SQL_LONGVARCHAR;
-    
+
     return;
 }
 
@@ -77,7 +79,7 @@ Information about support for different version of MS Access is welcome.
 
 =head1 IMPLEMENTATION NOTES
 
-MS Access supports the @@IDENTITY function for retriving the id of the latest inserted row.
+MS Access supports the @@IDENTITY function for retrieving the id of the latest inserted row.
 @@IDENTITY is global to the connection, so to support the possibility of getting the last inserted
 id for different tables, the insert() function stores the inserted id on a per table basis.
 last_insert_id() then just returns the stored value.

@@ -1,6 +1,7 @@
 package DBIx::Class::Storage::DBI::Replicated::WithDSN;
 
 use Moose::Role;
+use Scalar::Util 'reftype';
 requires qw/_query_start/;
 
 use namespace::clean -except => 'meta';
@@ -13,7 +14,7 @@ information in trace output
 =head1 SYNOPSIS
 
 This class is used internally by L<DBIx::Class::Storage::DBI::Replicated>.
-    
+
 =head1 DESCRIPTION
 
 This role adds C<DSN: > info to storage debugging output.
@@ -30,8 +31,25 @@ Add C<DSN: > to debugging output.
 
 around '_query_start' => sub {
   my ($method, $self, $sql, @bind) = @_;
-  my $dsn = $self->_dbi_connect_info->[0];
-  $self->$method("DSN: $dsn SQL: $sql", @bind);
+
+  my $dsn = eval { $self->dsn } || $self->_dbi_connect_info->[0];
+
+  my($op, $rest) = (($sql=~m/^(\w+)(.+)$/),'NOP', 'NO SQL');
+  my $storage_type = $self->can('active') ? 'REPLICANT' : 'MASTER';
+
+  my $query = do {
+    if ((reftype($dsn)||'') ne 'CODE') {
+      "$op [DSN_$storage_type=$dsn]$rest";
+    }
+    elsif (my $id = eval { $self->id }) {
+      "$op [$storage_type=$id]$rest";
+    }
+    else {
+      "$op [$storage_type]$rest";
+    }
+  };
+
+  $self->$method($query, @bind);
 };
 
 =head1 ALSO SEE

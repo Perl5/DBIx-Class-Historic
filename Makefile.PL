@@ -1,101 +1,66 @@
-use inc::Module::Install 0.89;
+use inc::Module::Install 0.93;
 use strict;
 use warnings;
 use POSIX ();
 
-use 5.006001; # delete this line if you want to send patches for earlier.
+use 5.008001;
+
+use FindBin;
+use lib "$FindBin::Bin/lib";
+
+# adjust ENV for $AUTHOR system() calls
+use Config;
+$ENV{PERL5LIB} = join ($Config{path_sep}, @INC);
+
+
+###
+### DO NOT ADD OPTIONAL DEPENDENCIES HERE, EVEN AS recommends()
+### All of them should go to DBIx::Class::Optional::Dependencies
+###
+
 
 name     'DBIx-Class';
-perl_version '5.006001';
+perl_version '5.008001';
 all_from 'lib/DBIx/Class.pm';
 
-requires 'DBD::SQLite'              => 1.25;
-requires 'Data::Page'               => 2.00;
-requires 'SQL::Abstract'            => 1.56;
-requires 'SQL::Abstract::Limit'     => 0.13;
-requires 'Class::C3::Componentised' => 1.0005;
-requires 'Carp::Clan'               => 6.0;
-requires 'DBI'                      => 1.605;
-requires 'Module::Find'             => 0.06;
-requires 'Class::Inspector'         => 1.24;
-requires 'Class::Accessor::Grouped' => 0.08003;
-requires 'JSON::Any'                => 1.18;
-requires 'Scope::Guard'             => 0.03;
-requires 'Path::Class'              => 0.16;
-requires 'Sub::Name'                => 0.04;
-requires 'MRO::Compat'              => 0.09;
+my $build_requires = {
+  'DBD::SQLite'              => '1.25',
+};
 
-# Core
-requires 'List::Util'               => 0;
-requires 'Scalar::Util'             => 0;
-requires 'Storable'                 => 0;
+my $test_requires = {
+  'File::Temp'               => '0.22',
+  'Test::Builder'            => '0.33',
+  'Test::Exception'          => '0',
+  'Test::More'               => '0.92',
+  'Test::Warn'               => '0.21',
+};
 
-# Perl 5.8.0 doesn't have utf8::is_utf8()
-requires 'Encode'                   => 0 if ($] <= 5.008000);
+my $runtime_requires = {
+  'Carp::Clan'               => '6.0',
+  'Class::Accessor::Grouped' => '0.09002',
+  'Class::C3::Componentised' => '1.0005',
+  'Class::Inspector'         => '1.24',
+  'Data::Page'               => '2.00',
+  'DBI'                      => '1.609',
+  'MRO::Compat'              => '0.09',
+  'Module::Find'             => '0.06',
+  'Path::Class'              => '0.18',
+  'SQL::Abstract'            => '1.61',
+  'SQL::Abstract::Limit'     => '0.13',
+  'Sub::Name'                => '0.04',
+  'Data::Dumper::Concise'    => '1.000',
+};
 
-test_requires 'Test::More'          => 0.82;
-test_requires 'Test::Builder'       => 0.33;
-test_requires 'Test::Warn'          => 0.11;
-test_requires 'Test::Exception'     => 0;
-test_requires 'Test::Deep'          => 0;
-
-recommends 'SQL::Translator'        => 0.09004;
-
-install_script (qw|
-    script/dbicadmin
-|);
-
-tests_recursive (qw|
-    t
-|);
-
-resources 'IRC'         => 'irc://irc.perl.org/#dbix-class';
-resources 'license'     => 'http://dev.perl.org/licenses/';
-resources 'repository'  => 'http://dev.catalyst.perl.org/svnweb/bast/browse/DBIx-Class/';
-resources 'MailingList' => 'http://lists.scsys.co.uk/cgi-bin/mailman/listinfo/dbix-class';
+# this is so we can order requires alphabetically
+# copies are needed for author requires injection
+my $reqs = {
+  build_requires => { %$build_requires },
+  requires => { %$runtime_requires },
+  test_requires => { %$test_requires },
+};
 
 
-# re-build README and require extra modules for testing if we're in a checkout
-
-my %force_requires_if_author = (
-  'Test::Pod::Coverage'       => 1.04,
-  'SQL::Translator'           => 0.09004,
-
-  # CDBI-compat related
-  'DBIx::ContextualFetch'     => 0,
-  'Class::DBI::Plugin::DeepAbstractSearch' => 0,
-  'Class::Trigger'            => 0,
-  'Time::Piece::MySQL'        => 0,
-  'Clone'                     => 0,
-  'Date::Simple'              => 3.03,
-
-  # t/52cycle.t
-  'Test::Memory::Cycle'       => 0,
-  'Devel::Cycle'              => 1.10,
-
-  # t/60core.t
-  'DateTime::Format::MySQL'   => 0,
-  
-  # t/89inflate_datetime.t
-  'DateTime::Format::Pg'      => 0,
-
-  # t/72pg.t
-  $ENV{DBICTEST_PG_DSN}
-    ? ('Sys::SigAction'=> 0)
-    : ()
-  ,
-
-  # t/93storage_replication.t
-  'Moose',                        => 0.77,
-  'MooseX::AttributeHelpers'      => 0.12,
-  'MooseX::Types',                => 0.10,
-  'namespace::clean'              => 0.11,
-  'Hash::Merge',                  => 0.11,
-
-  # t/96_is_deteministic_value.t
-  'DateTime::Format::Strptime' => 0,
-);
-
+# require extra modules for testing if we're in a checkout
 if ($Module::Install::AUTHOR) {
   warn <<'EOW';
 ******************************************************************************
@@ -108,25 +73,95 @@ if ($Module::Install::AUTHOR) {
 
 EOW
 
-  foreach my $module (keys %force_requires_if_author) {
-    build_requires ($module => $force_requires_if_author{$module});
-  }
-
-  system('pod2text lib/DBIx/Class.pm > README');
+  require DBIx::Class::Optional::Dependencies;
+  $reqs->{test_requires} = {
+    %{$reqs->{test_requires}},
+    %{DBIx::Class::Optional::Dependencies->_all_optional_requirements},
+  };
 }
 
-auto_provides;
+# compose final req list, for alphabetical ordering
+my %final_req;
+for my $rtype (keys %$reqs) {
+  for my $mod (keys %{$reqs->{$rtype}} ) {
 
-auto_install;
+    # sanity check req duplications
+    if ($final_req{$mod}) {
+      die "$mod specified as both a '$rtype' and a '$final_req{$mod}[0]'\n";
+    }
+
+    $final_req{$mod} = [ $rtype, $reqs->{$rtype}{$mod}||0 ],
+  }
+}
+
+# actual require
+for my $mod (sort keys %final_req) {
+  my ($rtype, $ver) = @{$final_req{$mod}};
+  no strict 'refs';
+  $rtype->($mod, $ver);
+}
+
+auto_install();
+
+# re-create various autogenerated documentation bits
+if ($Module::Install::AUTHOR) {
+
+  print "Regenerating README\n";
+  system('pod2text lib/DBIx/Class.pm > README');
+
+  if (-f 'MANIFEST') {
+    print "Removing MANIFEST\n";
+    unlink 'MANIFEST';
+  }
+
+  print "Regenerating dbicadmin.pod\n";
+  system('perl script/dbicadmin --pod > lib/dbicadmin.pod');
+
+  print "Regenerating Optional/Dependencies.pod\n";
+  require DBIx::Class::Optional::Dependencies;
+  DBIx::Class::Optional::Dependencies->_gen_pod;
+
+  # FIXME Disabled due to unsolved issues, ask theorbtwo
+  #  require Module::Install::Pod::Inherit;
+  #  PodInherit();
+}
+
+install_script (qw|
+    script/dbicadmin
+|);
+
+tests_recursive (qw|
+    t
+|);
+
+resources 'IRC'         => 'irc://irc.perl.org/#dbix-class';
+resources 'license'     => 'http://dev.perl.org/licenses/';
+resources 'repository'  => 'http://dev.catalyst.perl.org/repos/bast/DBIx-Class/';
+resources 'MailingList' => 'http://lists.scsys.co.uk/cgi-bin/mailman/listinfo/dbix-class';
+
+# Deprecated/internal modules need no exposure
+no_index directory => $_ for (qw|
+  lib/DBIx/Class/SQLAHacks
+  lib/DBIx/Class/PK/Auto
+|);
+no_index package => $_ for (qw/
+  DBIx::Class::SQLAHacks DBIx::Class::Storage::DBIHacks
+/);
+
 
 WriteAll();
+
 
 # Re-write META.yml to _exclude_ all forced requires (we do not want to ship this)
 if ($Module::Install::AUTHOR) {
 
-  Meta->{values}{build_requires} = [ grep 
-    { not exists $force_requires_if_author{$_->[0]} }
-    ( @{Meta->{values}{build_requires}} )
+  # FIXME test_requires is not yet part of META
+  my %original_build_requires = ( %$build_requires, %$test_requires );
+
+  print "Regenerating META with author requires excluded\n";
+  Meta->{values}{build_requires} = [ grep
+    { exists $original_build_requires{$_->[0]} }
+   ( @{Meta->{values}{build_requires}} )
   ];
 
   Meta->write;

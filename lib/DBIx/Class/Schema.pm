@@ -5,10 +5,10 @@ use warnings;
 
 use DBIx::Class::Exception;
 use Carp::Clan qw/^DBIx::Class/;
-use Scalar::Util qw/weaken/;
+use Scalar::Util ();
 use File::Spec;
 use Sub::Name ();
-require Module::Find;
+use Module::Find();
 
 use base qw/DBIx::Class/;
 
@@ -33,8 +33,9 @@ DBIx::Class::Schema - composable schemas
   __PACKAGE__->load_namespaces();
 
   package Library::Schema::Result::CD;
-  use base qw/DBIx::Class/;
-  __PACKAGE__->load_components(qw/Core/); # for example
+  use base qw/DBIx::Class::Core/;
+
+  __PACKAGE__->load_components(qw/InflateColumn::DateTime/); # for example
   __PACKAGE__->table('cd');
 
   # Elsewhere in your code:
@@ -42,7 +43,7 @@ DBIx::Class::Schema - composable schemas
     $dsn,
     $user,
     $password,
-    { AutoCommit => 0 },
+    { AutoCommit => 1 },
   );
 
   my $schema2 = Library::Schema->connect($coderef_returning_dbh);
@@ -81,7 +82,7 @@ particular which module inherits off which.
 
 With no arguments, this method uses L<Module::Find> to load all your
 Result classes from a sub-namespace F<Result> under your Schema class'
-namespace. Eg. With a Schema of I<MyDB::Schema> all files in
+namespace, i.e. with a Schema of I<MyDB::Schema> all files in
 I<MyDB::Schema::Result> are assumed to be Result classes.
 
 It also finds all ResultSet classes in the namespace F<ResultSet> and
@@ -239,16 +240,29 @@ sub load_namespaces {
     local *Class::C3::reinitialize = sub { };
     use warnings 'redefine';
 
-    # ensure classes are loaded and fetch properly sorted classes
+    # ensure classes are loaded and attached in inheritance order
     $class->ensure_class_loaded($_) foreach(values %results);
-    my @subclass_last = sort { $results{$a}->isa($results{$b}) } keys(%results);
-    
+    my %inh_idx;
+    my @subclass_last = sort {
+
+      ($inh_idx{$a} ||=
+        scalar @{mro::get_linear_isa( $results{$a} )}
+      )
+
+          <=>
+
+      ($inh_idx{$b} ||=
+        scalar @{mro::get_linear_isa( $results{$b} )}
+      )
+
+    } keys(%results);
+
     foreach my $result (@subclass_last) {
       my $result_class = $results{$result};
 
       my $rs_class = delete $resultsets{$result};
       my $rs_set = $class->_ns_get_rsrc_instance ($result_class)->resultset_class;
-      
+
       if($rs_set && $rs_set ne 'DBIx::Class::ResultSet') {
         if($rs_class && $rs_class ne $rs_set) {
           carp "We found ResultSet class '$rs_class' for '$result', but it seems "
@@ -285,8 +299,10 @@ sub load_namespaces {
 
 =back
 
-Alternative method to L</load_namespaces> which you should look at
-using if you can.
+L</load_classes> is an alternative method to L</load_namespaces>, both of
+which serve similar purposes, each with different advantages and disadvantages.
+In the general case you should use L</load_namespaces>, unless you need to
+be able to specify that only specific classes are loaded at runtime.
 
 With no arguments, this method uses L<Module::Find> to find all classes under
 the schema's namespace. Otherwise, this method loads the classes you specify
@@ -391,12 +407,10 @@ sub load_classes {
 
 Set the storage class that will be instantiated when L</connect> is called.
 If the classname starts with C<::>, the prefix C<DBIx::Class::Storage> is
-assumed by L</connect>.  
+assumed by L</connect>.
 
 You want to use this to set subclasses of L<DBIx::Class::Storage::DBI>
-in cases where the appropriate subclass is not autodetected, such as
-when dealing with MSSQL via L<DBD::Sybase>, in which case you'd set it
-to C<::DBI::Sybase::MSSQL>.
+in cases where the appropriate subclass is not autodetected.
 
 If your storage type requires instantiation arguments, those are
 defined as a second argument in the form of a hashref and the entire
@@ -496,7 +510,7 @@ syntax on the C<@connectinfo> argument, or L<DBIx::Class::Storage> in
 general.
 
 Note that C<connect_info> expects an arrayref of arguments, but
-C<connect> does not. C<connect> wraps it's arguments in an arrayref
+C<connect> does not. C<connect> wraps its arguments in an arrayref
 before passing them to C<connect_info>.
 
 =head3 Overloading
@@ -528,6 +542,8 @@ name.
 
 sub resultset {
   my ($self, $moniker) = @_;
+  $self->throw_exception('resultset() expects a source name')
+    unless defined $moniker;
   return $self->source($moniker)->resultset;
 }
 
@@ -614,13 +630,13 @@ See L<DBIx::Class::Storage/"txn_do"> for more information.
 This interface is preferred over using the individual methods L</txn_begin>,
 L</txn_commit>, and L</txn_rollback> below.
 
-WARNING: If you are connected with C<AutoCommit => 0> the transaction is
+WARNING: If you are connected with C<< AutoCommit => 0 >> the transaction is
 considered nested, and you will still need to call L</txn_commit> to write your
-changes when appropriate. You will also want to connect with C<auto_savepoint =>
-1> to get partial rollback to work, if the storage driver for your database
+changes when appropriate. You will also want to connect with C<< auto_savepoint =>
+1 >> to get partial rollback to work, if the storage driver for your database
 supports it.
 
-Connecting with C<AutoCommit => 1> is recommended.
+Connecting with C<< AutoCommit => 1 >> is recommended.
 
 =cut
 
@@ -732,7 +748,7 @@ Otherwise, each set of data is inserted into the database using
 L<DBIx::Class::ResultSet/create>, and a arrayref of the resulting row
 objects is returned.
 
-i.e.,
+e.g.
 
   $schema->populate('Artist', [
     [ qw/artistid name/ ],
@@ -740,7 +756,7 @@ i.e.,
     [ 2, 'Indie Band' ],
     ...
   ]);
-  
+
 Since wantarray context is basically the same as looping over $rs->create(...) 
 you won't see any performance benefits and in this case the method is more for
 convenience. Void context sends the column information directly to storage
@@ -791,13 +807,13 @@ Overload C<connection> to change the behaviour of C<connect>.
 sub connection {
   my ($self, @info) = @_;
   return $self if !@info && $self->storage;
-  
+
   my ($storage_class, $args) = ref $self->storage_type ? 
     ($self->_normalize_storage_type($self->storage_type),{}) : ($self->storage_type, {});
-    
+
   $storage_class = 'DBIx::Class::Storage'.$storage_class
     if $storage_class =~ m/^::/;
-  eval "require ${storage_class};";
+  eval { $self->ensure_class_loaded ($storage_class) };
   $self->throw_exception(
     "No arguments to load_classes and couldn't load ${storage_class} ($@)"
   ) if $@;
@@ -835,7 +851,7 @@ attached to the current schema.
 
 It also attaches a corresponding L<DBIx::Class::ResultSource> object to the
 new $schema object. If C<$additional_base_class> is given, the new composed
-classes will inherit from first the corresponding classe from the current
+classes will inherit from first the corresponding class from the current
 schema then the base class.
 
 For example, for a schema with My::Schema::CD and My::Schema::Artist classes,
@@ -893,7 +909,7 @@ sub compose_namespace {
     no strict 'refs';
     no warnings 'redefine';
     foreach my $meth (qw/class source resultset/) {
-      *{"${target}::${meth}"} =
+      *{"${target}::${meth}"} = Sub::Name::subname "${target}::${meth}" =>
         sub { shift->schema->$meth(@_) };
     }
   }
@@ -1067,7 +1083,7 @@ sub deployment_statements {
   $self->storage->deployment_statements($self, @_);
 }
 
-=head2 create_ddl_dir (EXPERIMENTAL)
+=head2 create_ddl_dir
 
 =over 4
 
@@ -1109,6 +1125,19 @@ name format is: C<$dir$schema-$version-$type.sql>.
 You may override this method in your schema if you wish to use a different
 format.
 
+ WARNING
+
+ Prior to DBIx::Class version 0.08100 this method had a different signature:
+
+    my $filename = $table->ddl_filename($type, $dir, $version, $preversion)
+
+ In recent versions variables $dir and $version were reversed in order to
+ bring the signature in line with other Schema/Storage methods. If you 
+ really need to maintain backward compatibility, you can do the following
+ in any overriding methods:
+
+    ($dir, $version) = ($version, $dir) if ($DBIx::Class::VERSION < 0.08100);
+
 =cut
 
 sub ddl_filename {
@@ -1118,7 +1147,7 @@ sub ddl_filename {
   $filename =~ s/::/-/g;
   $filename = File::Spec->catfile($dir, "$filename-$version-$type.sql");
   $filename =~ s/$version/$preversion-$version/ if($preversion);
-  
+
   return $filename;
 }
 
@@ -1126,7 +1155,7 @@ sub ddl_filename {
 
 Provided as the recommended way of thawing schema objects. You can call 
 C<Storable::thaw> directly if you wish, but the thawed objects will not have a
-reference to any schema, so are rather useless
+reference to any schema, so are rather useless.
 
 =cut
 
@@ -1138,8 +1167,8 @@ sub thaw {
 
 =head2 freeze
 
-This doesn't actualy do anything more than call L<Storable/freeze>, it is just
-provided here for symetry.
+This doesn't actually do anything more than call L<Storable/freeze>, it is just
+provided here for symmetry.
 
 =cut
 
@@ -1149,8 +1178,17 @@ sub freeze {
 
 =head2 dclone
 
-Recommeneded way of dcloning objects. This is needed to properly maintain
-references to the schema object (which itself is B<not> cloned.)
+=over 4
+
+=item Arguments: $object
+
+=item Return Value: dcloned $object
+
+=back
+
+Recommended way of dcloning L<DBIx::Class::Row> and L<DBIx::Class::ResultSet>
+objects so their references to the schema object
+(which itself is B<not> cloned) are properly maintained.
 
 =cut
 
@@ -1231,6 +1269,24 @@ sub register_source {
   $self->_register_source(@_);
 }
 
+=head2 unregister_source
+
+=over 4
+
+=item Arguments: $moniker
+
+=back
+
+Removes the L<DBIx::Class::ResultSource> from the schema for the given moniker.
+
+=cut
+
+sub unregister_source {
+  my $self = shift;
+
+  $self->_unregister_source(@_);
+}
+
 =head2 register_extra_source
 
 =over 4
@@ -1257,7 +1313,7 @@ sub _register_source {
 
   $source = $source->new({ %$source, source_name => $moniker });
   $source->schema($self);
-  weaken($source->{schema}) if ref($self);
+  Scalar::Util::weaken($source->{schema}) if ref($self);
 
   my $rs_class = $source->result_class;
 
@@ -1344,7 +1400,7 @@ more information.
     $self->throw_exception
       ("No arguments to load_classes and couldn't load ${base} ($@)")
         if $@;
-  
+
     if ($self eq $target) {
       # Pathological case, largely caused by the docs on early C::M::DBIC::Plain
       foreach my $moniker ($self->sources) {
@@ -1357,14 +1413,14 @@ more information.
       $self->connection(@info);
       return $self;
     }
-  
+
     my $schema = $self->compose_namespace($target, $base);
     {
       no strict 'refs';
       my $name = join '::', $target, 'schema';
       *$name = Sub::Name::subname $name, sub { $schema };
     }
-  
+
     $schema->connection(@info);
     foreach my $moniker ($schema->sources) {
       my $source = $schema->source($moniker);

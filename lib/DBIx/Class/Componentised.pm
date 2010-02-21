@@ -5,30 +5,39 @@ use strict;
 use warnings;
 
 use base 'Class::C3::Componentised';
-use Carp::Clan qw/^DBIx::Class/;
+use Carp::Clan qw/^DBIx::Class|^Class::C3::Componentised/;
+use mro 'c3';
 
+# this warns of subtle bugs introduced by UTF8Columns hacky handling of store_column
 sub inject_base {
-  my ($class, $target, @to_inject) = @_;
-  {
-    no strict 'refs';
-    foreach my $to (reverse @to_inject) {
-      my @comps = qw(DigestColumns ResultSetManager Ordered UTF8Columns);
-           # Add components here that need to be loaded before Core
-      foreach my $first_comp (@comps) {
-        if ($to eq 'DBIx::Class::Core' &&
-            $target->isa("DBIx::Class::${first_comp}")) {
-          carp "Possible incorrect order of components in ".
-               "${target}::load_components($first_comp) call: Core loaded ".
-               "before $first_comp. See the documentation for ".
-               "DBIx::Class::$first_comp for more information";
-        }
+  my $class = shift;
+  my $target = shift;
+
+  my @present_components = (@{mro::get_linear_isa ($target)||[]});
+
+  no strict 'refs';
+  for my $comp (reverse @_) {
+
+    if ($comp->isa ('DBIx::Class::UTF8Columns') ) {
+      require B;
+      my @broken;
+
+      for (@present_components) {
+        my $cref = $_->can ('store_column')
+         or next;
+        push @broken, $_ if B::svref_2object($cref)->STASH->NAME ne 'DBIx::Class::Row';
       }
-      unshift( @{"${target}::ISA"}, $to )
-        unless ($target eq $to || $target->isa($to));
+
+      carp "Incorrect loading order of $comp by ${target} will affect other components overriding store_column ("
+          . join (', ', @broken)
+          .'). Refer to the documentation of DBIx::Class::UTF8Columns for more info'
+       if @broken;
     }
+
+    unshift @present_components, $comp;
   }
 
-  $class->next::method($target, @to_inject);
+  $class->next::method($target, @_);
 }
 
 1;

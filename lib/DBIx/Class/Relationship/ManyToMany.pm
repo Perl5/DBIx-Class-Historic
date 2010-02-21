@@ -7,6 +7,11 @@ use warnings;
 use Carp::Clan qw/^DBIx::Class/;
 use Sub::Name ();
 
+our %_pod_inherit_config = 
+  (
+   class_map => { 'DBIx::Class::Relationship::ManyToMany' => 'DBIx::Class::Relationship' }
+  );
+
 sub many_to_many {
   my ($class, $meth, $rel, $f_rel, $rel_attrs) = @_;
 
@@ -59,15 +64,15 @@ EOW
       my $rs = $self->search_related($rel)->search_related(
         $f_rel, @_ > 0 ? @_ : undef, { %{$rel_attrs||{}}, %$attrs }
       );
-	  return $rs;
+      return $rs;
     };
 
     my $meth_name = join '::', $class, $meth;
     *$meth_name = Sub::Name::subname $meth_name, sub {
-		my $self = shift;
-		my $rs = $self->$rs_meth( @_ );
-  		return (wantarray ? $rs->all : $rs);
-	};
+      my $self = shift;
+      my $rs = $self->$rs_meth( @_ );
+      return (wantarray ? $rs->all : $rs);
+    };
 
     my $add_meth_name = join '::', $class, $add_meth;
     *$add_meth_name = Sub::Name::subname $add_meth_name, sub {
@@ -97,7 +102,7 @@ EOW
       my $link = $self->search_related($rel)->new_result($link_vals);
       $link->set_from_related($f_rel, $obj);
       $link->insert();
-	  return $obj;
+      return $obj;
     };
 
     my $set_meth_name = join '::', $class, $set_meth;
@@ -107,7 +112,14 @@ EOW
         "{$set_meth} needs a list of objects or hashrefs"
       );
       my @to_set = (ref($_[0]) eq 'ARRAY' ? @{ $_[0] } : @_);
-      $self->search_related($rel, {})->delete;
+      # if there is a where clause in the attributes, ensure we only delete
+      # rows that are within the where restriction
+      if ($rel_attrs && $rel_attrs->{where}) {
+        $self->search_related( $rel, $rel_attrs->{where},{join => $f_rel})->delete;
+      } else {
+        $self->search_related( $rel, {} )->delete;
+      }
+      # add in the set rel objects
       $self->$add_meth($_, ref($_[1]) ? $_[1] : {}) for (@to_set);
     };
 

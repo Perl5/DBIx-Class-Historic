@@ -3,10 +3,14 @@ package DBIx::Class;
 use strict;
 use warnings;
 
+use MRO::Compat;
+use mro 'c3';
+
+use DBIx::Class::Optional::Dependencies;
+
 use vars qw($VERSION);
 use base qw/DBIx::Class::Componentised Class::Accessor::Grouped/;
 use DBIx::Class::StartupCheck;
-
 
 sub mk_classdata {
   shift->mk_classaccessor(@_);
@@ -23,8 +27,7 @@ sub component_base_class { 'DBIx::Class' }
 # Always remember to do all digits for the version even if they're 0
 # i.e. first release of 0.XX *must* be 0.XX000. This avoids fBSD ports
 # brain damage and presumably various other packaging systems too
-
-$VERSION = '0.08103';
+$VERSION = '0.08119_1';
 
 $VERSION = eval $VERSION; # numify for warning-free dev releases
 
@@ -53,13 +56,20 @@ DBIx::Class - Extensible and flexible object <-> relational mapper.
 
 The community can be found via:
 
-  Mailing list: http://lists.scsys.co.uk/mailman/listinfo/dbix-class/
+=over
 
-  SVN: http://dev.catalyst.perl.org/repos/bast/DBIx-Class/
+=item * IRC: L<irc.perl.org#dbix-class (click for instant chatroom login)
+|http://mibbit.com/chat/#dbix-class@irc.perl.org>
 
-  SVNWeb: http://dev.catalyst.perl.org/svnweb/bast/browse/DBIx-Class/
+=item * Mailing list: L<http://lists.scsys.co.uk/mailman/listinfo/dbix-class>
 
-  IRC: irc.perl.org#dbix-class
+=item * RT Bug Tracker: L<https://rt.cpan.org/Dist/Display.html?Queue=DBIx-Class>
+
+=item * SVNWeb: L<http://dev.catalyst.perl.org/svnweb/bast/browse/DBIx-Class/0.08>
+
+=item * SVN: L<http://dev.catalyst.perl.org/repos/bast/DBIx-Class/0.08>
+
+=back
 
 =head1 SYNOPSIS
 
@@ -72,13 +82,14 @@ Create a schema class called MyDB/Schema.pm:
 
   1;
 
-Create a table class to represent artists, who have many CDs, in
+Create a result class to represent artists, who have many CDs, in
 MyDB/Schema/Result/Artist.pm:
 
-  package MyDB::Schema::Result::Artist;
-  use base qw/DBIx::Class/;
+See L<DBIx::Class::ResultSource> for docs on defining result classes.
 
-  __PACKAGE__->load_components(qw/Core/);
+  package MyDB::Schema::Result::Artist;
+  use base qw/DBIx::Class::Core/;
+
   __PACKAGE__->table('artist');
   __PACKAGE__->add_columns(qw/ artistid name /);
   __PACKAGE__->set_primary_key('artistid');
@@ -86,13 +97,13 @@ MyDB/Schema/Result/Artist.pm:
 
   1;
 
-A table class to represent a CD, which belongs to an artist, in
+A result class to represent a CD, which belongs to an artist, in
 MyDB/Schema/Result/CD.pm:
 
   package MyDB::Schema::Result::CD;
-  use base qw/DBIx::Class/;
+  use base qw/DBIx::Class::Core/;
 
-  __PACKAGE__->load_components(qw/Core/);
+  __PACKAGE__->load_components(qw/InflateColumn::DateTime/);
   __PACKAGE__->table('cd');
   __PACKAGE__->add_columns(qw/ cdid artistid title year /);
   __PACKAGE__->set_primary_key('cdid');
@@ -108,8 +119,16 @@ Then you can use these classes in your application's code:
 
   # Query for all artists and put them in an array,
   # or retrieve them as a result set object.
+  # $schema->resultset returns a DBIx::Class::ResultSet
   my @all_artists = $schema->resultset('Artist')->all;
   my $all_artists_rs = $schema->resultset('Artist');
+
+  # Output all artists names
+  # $artist here is a DBIx::Class::Row, which has accessors
+  # for all its columns. Rows are also subclasses of your Result class.
+  foreach $artist (@all_artists) {
+    print $artist->name, "\n";
+  }
 
   # Create a result set to search for artists.
   # This does not query the DB.
@@ -217,7 +236,11 @@ blblack: Brandon L. Black <blblack@gmail.com>
 
 bluefeet: Aran Deltac <bluefeet@cpan.org>
 
+boghead: Bryan Beeley <cpan@beeley.org>
+
 bricas: Brian Cassidy <bricas@cpan.org>
+
+brunov: Bruno Vecchi <vecchi.b@gmail.com>
 
 caelum: Rafael Kitover <rkitover@cpan.org>
 
@@ -231,6 +254,8 @@ da5id: David Jack Olrik <djo@cpan.org>
 
 debolaz: Anders Nor Berle <berle@cpan.org>
 
+dew: Dan Thomas <dan@godders.org>
+
 dkubb: Dan Kubb <dan.kubb-cpan@onautopilot.com>
 
 dnm: Justin Wheeler <jwheeler@datademons.com>
@@ -240,6 +265,8 @@ dwc: Daniel Westermann-Clark <danieltwc@cpan.org>
 dyfrgi: Michael Leuchtenburg <michael@slashhome.org>
 
 frew: Arthur Axel "fREW" Schmidt <frioux@gmail.com>
+
+goraxe: Gordon Irving <goraxe@cpan.org>
 
 gphat: Cory G Watson <gphat@cpan.org>
 
@@ -254,6 +281,8 @@ jesper: Jesper Krogh
 jgoulah: John Goulah <jgoulah@cpan.org>
 
 jguenther: Justin Guenther <jguenther@cpan.org>
+
+jhannah: Jay Hannah <jay@jays.net>
 
 jnapiorkowski: John Napiorkowski <jjn1056@yahoo.com>
 
@@ -281,7 +310,11 @@ Nniuq: Ron "Quinn" Straight" <quinnfazigu@gmail.org>
 
 norbi: Norbert Buchmuller <norbi@nix.hu>
 
+nuba: Nuba Princigalli <nuba@cpan.org>
+
 Numa: Dan Sully <daniel@cpan.org>
+
+ovid: Curtis "Ovid" Poe <ovid@cpan.org>
 
 oyse: Øystein Torget <oystein.torget@dnv.com>
 
@@ -301,13 +334,17 @@ quicksilver: Jules Bean
 
 rafl: Florian Ragwitz <rafl@debian.org>
 
+rbuels: Robert Buels <rmb32@cornell.edu>
+
 rdj: Ryan D Johnson <ryan@innerfence.com>
 
-ribasushi: Peter Rabbitson <rabbit+dbic@rabbit.us>
+ribasushi: Peter Rabbitson <ribasushi@cpan.org>
 
 rjbs: Ricardo Signes <rjbs@cpan.org>
 
 robkinyon: Rob Kinyon <rkinyon@cpan.org>
+
+Roman: Roman Filippov <romanf@cpan.org>
 
 sc_: Just Another Perl Hacker
 
@@ -317,6 +354,8 @@ semifor: Marc Mims <marc@questright.com>
 
 solomon: Jared Johnson <jaredj@nmgi.com>
 
+spb: Stephen Bennett <stephen@freenode.net>
+
 sszabo: Stephan Szabo <sszabo@bigpanda.com>
 
 teejay : Aaron Trevena <teejay@cpan.org>
@@ -324,6 +363,8 @@ teejay : Aaron Trevena <teejay@cpan.org>
 Todd Lipcon
 
 Tom Hukins
+
+triode: Pete Gamache <gamache@cpan.org>
 
 typester: Daisuke Murase <typester@cpan.org>
 
@@ -337,8 +378,14 @@ wreis: Wallace Reis <wreis@cpan.org>
 
 zamolxes: Bogdan Lucaciu <bogdan@wiz.ro>
 
+=head1 COPYRIGHT
+
+Copyright (c) 2005 - 2010 the DBIx::Class L</AUTHOR> and L</CONTRIBUTORS>
+as listed above.
+
 =head1 LICENSE
 
-You may distribute this code under the same terms as Perl itself.
+This library is free software and may be distributed under the same terms
+as perl itself.
 
 =cut

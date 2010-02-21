@@ -4,9 +4,10 @@ use strict;
 use warnings;
 
 use base qw/DBIx::Class/;
+use mro 'c3';
 
-use Scalar::Util qw/weaken/;
-use Carp::Clan qw/^DBIx::Class/;
+use DBIx::Class::Exception;
+use Scalar::Util();
 use IO::File;
 use DBIx::Class::Storage::TxnScopeGuard;
 
@@ -82,7 +83,7 @@ storage object, such as during L<DBIx::Class::Schema/clone>.
 sub set_schema {
   my ($self, $schema) = @_;
   $self->schema($schema);
-  weaken($self->{schema}) if ref $self->{schema};
+  Scalar::Util::weaken($self->{schema}) if ref $self->{schema};
 }
 
 =head2 connected
@@ -119,8 +120,12 @@ Throws an exception - croaks.
 sub throw_exception {
   my $self = shift;
 
-  $self->schema->throw_exception(@_) if $self->schema;
-  croak @_;
+  if ($self->schema) {
+    $self->schema->throw_exception(@_);
+  }
+  else {
+    DBIx::Class::Exception->throw(@_);
+  }
 }
 
 =head2 txn_do
@@ -248,6 +253,9 @@ sub txn_begin { die "Virtual method!" }
 
 Issues a commit of the current transaction.
 
+It does I<not> perform an actual storage commit unless there's a DBIx::Class
+transaction currently in effect (i.e. you called L</txn_begin>).
+
 =cut
 
 sub txn_commit { die "Virtual method!" }
@@ -345,7 +353,7 @@ shell environment.
 =head2 debugfh
 
 Set or retrieve the filehandle used for trace/debug output.  This should be
-an IO::Handle compatible ojbect (only the C<print> method is used.  Initially
+an IO::Handle compatible object (only the C<print> method is used.  Initially
 set to be STDERR - although see information on the
 L<DBIC_TRACE> environment variable.
 

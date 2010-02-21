@@ -2,16 +2,13 @@ package DBIx::Class::Storage::DBI::SQLite;
 
 use strict;
 use warnings;
+
+use base qw/DBIx::Class::Storage::DBI/;
+use mro 'c3';
+
 use POSIX 'strftime';
 use File::Copy;
 use File::Spec;
-
-use base qw/DBIx::Class::Storage::DBI/;
-
-sub _dbh_last_insert_id {
-  my ($self, $dbh, $source, $col) = @_;
-  $dbh->func('last_insert_rowid');
-}
 
 sub backup
 {
@@ -45,6 +42,24 @@ sub backup
   return $backupfile;
 }
 
+sub deployment_statements {
+  my $self = shift;;
+  my ($schema, $type, $version, $dir, $sqltargs, @rest) = @_;
+
+  $sqltargs ||= {};
+
+  my $sqlite_version = $self->_get_dbh->{sqlite_version};
+
+  # numify, SQLT does a numeric comparison
+  $sqlite_version =~ s/^(\d+) \. (\d+) (?: \. (\d+))? .*/${1}.${2}/x;
+
+  $sqltargs->{producer_args}{sqlite_version} = $sqlite_version;
+
+  $self->next::method($schema, $type, $version, $dir, $sqltargs, @rest);
+}
+
+sub datetime_parser_type { return "DateTime::Format::SQLite"; } 
+
 1;
 
 =head1 NAME
@@ -54,7 +69,7 @@ DBIx::Class::Storage::DBI::SQLite - Automatic primary key class for SQLite
 =head1 SYNOPSIS
 
   # In your table classes
-  __PACKAGE__->load_components(qw/PK::Auto Core/);
+  use base 'DBIx::Class::Core';
   __PACKAGE__->set_primary_key('id');
 
 =head1 DESCRIPTION
