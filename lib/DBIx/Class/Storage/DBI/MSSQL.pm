@@ -21,9 +21,10 @@ __PACKAGE__->sql_maker_class('DBIx::Class::SQLMaker::MSSQL');
 
 __PACKAGE__->sql_quote_char([qw/[ ]/]);
 
-__PACKAGE__->datetime_parser_type (
-  'DBIx::Class::Storage::DBI::MSSQL::DateTime::Format'
-);
+__PACKAGE__->datetime_parse_via({
+  datetime      => '%Y-%m-%d %H:%M:%S.%3N', # %F %T
+  smalldatetime => '%Y-%m-%d %H:%M:%S',
+});
 
 __PACKAGE__->new_guid('NEWID()');
 
@@ -187,54 +188,6 @@ sub _ping {
   } catch {
     0;
   };
-}
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::MSSQL::DateTime::Format;
-
-my $datetime_format      = '%Y-%m-%d %H:%M:%S.%3N'; # %F %T
-my $smalldatetime_format = '%Y-%m-%d %H:%M:%S';
-
-my ($datetime_parser, $smalldatetime_parser);
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->format_datetime(shift);
-}
-
-sub parse_smalldatetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $smalldatetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $smalldatetime_format,
-    on_error => 'croak',
-  );
-  return $smalldatetime_parser->parse_datetime(shift);
-}
-
-sub format_smalldatetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $smalldatetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $smalldatetime_format,
-    on_error => 'croak',
-  );
-  return $smalldatetime_parser->format_datetime(shift);
 }
 
 1;

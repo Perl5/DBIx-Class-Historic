@@ -8,7 +8,7 @@ use mro 'c3';
 use Try::Tiny;
 use namespace::clean;
 
-__PACKAGE__->datetime_parser_type('DateTime::Format::DB2');
+__PACKAGE__->datetime_parse_via('DateTime::Format::DB2');
 __PACKAGE__->sql_quote_char ('"');
 
 # lazy-default kind of thing

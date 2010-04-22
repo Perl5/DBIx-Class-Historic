@@ -15,6 +15,8 @@ DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_ase')
   unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_dt')
     && DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_ase');
 
+$ENV{DBIC_SYBASE_FREETDS_NOWARN} = 1;
+
 my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_SYBASE_${_}" } qw/DSN USER PASS/};
 
 if (not ($dsn && $user)) {

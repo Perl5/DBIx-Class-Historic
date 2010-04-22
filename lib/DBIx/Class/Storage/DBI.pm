@@ -23,13 +23,13 @@ use namespace::clean;
 __PACKAGE__->cursor_class('DBIx::Class::Storage::DBI::Cursor');
 
 __PACKAGE__->mk_group_accessors('inherited' => qw/
-  sql_limit_dialect sql_quote_char sql_name_sep
+  sql_limit_dialect sql_quote_char sql_name_sep datetime_strptime_formats
 /);
 
-__PACKAGE__->mk_group_accessors('component_class' => qw/sql_maker_class datetime_parser_type/);
+__PACKAGE__->mk_group_accessors('component_class' => qw/sql_maker_class datetime_parser_class/);
 
 __PACKAGE__->sql_maker_class('DBIx::Class::SQLMaker');
-__PACKAGE__->datetime_parser_type('DateTime::Format::MySQL'); # historic default
+__PACKAGE__->datetime_parser_class('DateTime::Format::MySQL'); # historic default
 
 __PACKAGE__->sql_name_sep('.');
 
@@ -91,7 +91,9 @@ my @rdbms_specific_methods = qw/
   sqlt_type
   sql_maker
   build_datetime_parser
+  datetime_parser_class
   datetime_parser_type
+  datetime_parse_via
 
   txn_begin
   insert
@@ -2842,7 +2844,101 @@ sub datetime_parser {
 
 =head2 datetime_parser_type
 
-Defines the datetime parser class - currently defaults to L<DateTime::Format::MySQL>
+B<*DEPRECATED*>
+
+Defines the datetime parser class - currently defaults to
+L<DateTime::Format::MySQL>. Use L</datetime_parse_via> instead.
+
+=cut
+
+sub datetime_parser_type {
+  my $self = shift;
+  carp_unique 'this method is deprecated, use datetime_parse_via instead';
+  return $self->datetime_parse_via(@_);
+}
+
+=head2 datetime_parse_via
+
+Sets or returns the class used for parsing datetimes.
+
+Can also take a hashref specifying L<DateTime::Format::Strptime> formats, in
+which case the parser class will be generated dynamically (and returned.)
+
+The format of the hashref entries is C<< type => strptime_format >> or
+C<< type => { format => strptime_format, parse => strptime_format } >>.
+
+For example:
+
+  {
+    datetime      => '%Y-%m-%d %H:%M:%S.%3N',
+    smalldatetime => '%Y-%m-%d %H:%M:%S',
+  }
+
+or
+
+  {
+    datetime => {
+      parse  => '%Y-%m-%dT%H:%M:%S.%3NZ',
+      format => '%Y-%m-%d %H:%M:%S.%3N',
+    }
+  }
+
+=cut
+
+sub datetime_parse_via {
+  my $self = shift;
+
+  return $self->datetime_parser_class if not @_;
+
+  my $via = shift;
+
+  if (not ref $via) {
+    $self->datetime_parser_class($via);
+    return $via;
+  }
+  elsif (ref $via ne 'HASH') {
+    $self->throw_exception(
+'datetime_parse_via argument must be class name or hashref of Strptime formats'
+    );
+  }
+
+  my $class = ref $self || $self;
+  my ($class_basename) = $class =~ /^@{[__PACKAGE__]}::(.*)\z/;
+
+  $class_basename ||= $class; # custom storage
+
+  my $parser_class = "DBIx::Class::DateTime::Format::${class_basename}";
+
+  while (my ($type, $format) = each %$via) {
+    $format = { parse => $format, format => $format } if not ref $format;
+
+    for my $action (qw/parse format/) {
+      my $method = "${parser_class}::${action}_$type";
+
+      {
+        no strict 'refs';
+
+        my $parser;
+        my $strptime_method;
+
+        *$method = subname $method => sub {
+          shift;
+          $parser ||= DateTime::Format::Strptime->new(
+            pattern  => $format->{$action},
+            on_error => 'croak',
+          );
+          $strptime_method ||= $parser->can("${action}_datetime");
+          return $parser->$strptime_method(shift);
+        };
+      }
+    }
+  }
+
+  $self->datetime_strptime_formats($via);
+  $self->datetime_parser_class($parser_class);
+
+  return $parser_class;
+}
 
 =head2 build_datetime_parser
 
@@ -2852,8 +2948,14 @@ See L</datetime_parser>
 
 sub build_datetime_parser {
   my $self = shift;
-  my $type = $self->datetime_parser_type(@_);
-  return $type;
+
+  my $parser_class = $self->datetime_parse_via(@_);
+
+  if ($self->datetime_strptime_formats) {
+    require DateTime::Format::Strptime;
+  }
+
+  return $parser_class;
 }
 
 

@@ -8,8 +8,15 @@ use base qw/
   DBIx::Class::Storage::DBI::MSSQL
 /;
 use mro 'c3';
-
 use DBIx::Class::Carp;
+use namespace::clean;
+
+__PACKAGE__->datetime_parse_via({
+  datetime => {
+    parse  => '%Y-%m-%dT%H:%M:%S.%3NZ',
+    format => '%Y-%m-%d %H:%M:%S.%3N',
+  },
+});
 
 =head1 NAME
 
@@ -33,10 +40,6 @@ L<DBIx::Class::Storage::DBI::MSSQL>.
 =head1 METHODS
 
 =cut
-
-__PACKAGE__->datetime_parser_type(
-  'DBIx::Class::Storage::DBI::Sybase::Microsoft_SQL_Server::DateTime::Format'
-);
 
 sub _rebless {
   my $self = shift;
@@ -139,35 +142,6 @@ sub connect_call_datetime_setup {
       'Your DBD::Sybase is too old to support '
     . 'DBIx::Class::InflateColumn::DateTime, please upgrade!';
   }
-}
-
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::Sybase::Microsoft_SQL_Server::DateTime::Format;
-
-my $datetime_parse_format  = '%Y-%m-%dT%H:%M:%S.%3NZ';
-my $datetime_format_format = '%Y-%m-%d %H:%M:%S.%3N'; # %F %T
-
-my ($datetime_parser, $datetime_formatter);
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_parse_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_formatter ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format_format,
-    on_error => 'croak',
-  );
-  return $datetime_formatter->format_datetime(shift);
 }
 
 1;

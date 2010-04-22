@@ -13,7 +13,7 @@ use namespace::clean;
 __PACKAGE__->sql_maker_class('DBIx::Class::SQLMaker::SQLite');
 __PACKAGE__->sql_limit_dialect ('LimitOffset');
 __PACKAGE__->sql_quote_char ('"');
-__PACKAGE__->datetime_parser_type ('DateTime::Format::SQLite');
+__PACKAGE__->datetime_parse_via ('DateTime::Format::SQLite');
 
 =head1 NAME
 

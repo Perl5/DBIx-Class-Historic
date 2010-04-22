@@ -13,7 +13,7 @@ use namespace::clean;
 
 __PACKAGE__->sql_limit_dialect ('LimitOffset');
 __PACKAGE__->sql_quote_char ('"');
-__PACKAGE__->datetime_parser_type ('DateTime::Format::Pg');
+__PACKAGE__->datetime_parse_via('DateTime::Format::Pg');
 __PACKAGE__->_use_multicolumn_in (1);
 
 sub _determine_supports_insert_returning {

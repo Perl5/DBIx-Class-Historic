@@ -17,6 +17,10 @@ __PACKAGE__->new_guid('UUIDTOSTR(NEWID())');
 # default to the UUID decoding cursor, overridable by the user
 __PACKAGE__->cursor_class('DBIx::Class::Storage::DBI::SQLAnywhere::Cursor');
 
+__PACKAGE__->datetime_parse_via({
+  datetime => '%Y-%m-%d %H:%M:%S.%6N'
+});
+
 =head1 NAME
 
 DBIx::Class::Storage::DBI::SQLAnywhere - Driver for SQL Anywhere
@@ -135,21 +139,6 @@ sub select_single {
   }
 
   return @row;
-}
-
-# this sub stolen from MSSQL
-
-sub build_datetime_parser {
-  my $self = shift;
-  my $type = "DateTime::Format::Strptime";
-  try {
-    eval "require ${type}"
-  }
-  catch {
-    $self->throw_exception("Couldn't load ${type}: $_");
-  };
-
-  return $type->new( pattern => '%Y-%m-%d %H:%M:%S.%6N' );
 }
 
 =head2 connect_call_datetime_setup

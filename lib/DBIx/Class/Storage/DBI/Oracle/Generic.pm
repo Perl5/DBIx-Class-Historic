@@ -14,7 +14,7 @@ use namespace::clean;
 __PACKAGE__->sql_limit_dialect ('RowNum');
 __PACKAGE__->sql_quote_char ('"');
 __PACKAGE__->sql_maker_class('DBIx::Class::SQLMaker::Oracle');
-__PACKAGE__->datetime_parser_type('DateTime::Format::Oracle');
+__PACKAGE__->datetime_parse_via('DateTime::Format::Oracle');
 
 sub __cache_queries_with_max_lob_parts { 2 }
 

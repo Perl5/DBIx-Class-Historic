@@ -7,6 +7,11 @@ use mro 'c3';
 use Try::Tiny;
 use namespace::clean;
 
+__PACKAGE__->datetime_parse_via({
+  datetime => '%Y-%m-%d %H:%M:%S.%4N',
+  date     => '%Y-%m-%d',
+});
+
 =head1 NAME
 
 DBIx::Class::Storage::DBI::InterBase - Driver for the Firebird RDBMS via
@@ -29,10 +34,6 @@ To turn on L<DBIx::Class::InflateColumn::DateTime> support, see
 L</connect_call_datetime_setup>.
 
 =cut
-
-__PACKAGE__->datetime_parser_type(
-  'DBIx::Class::Storage::DBI::InterBase::DateTime::Format'
-);
 
 sub _ping {
   my $self = shift;
@@ -133,55 +134,6 @@ sub connect_call_datetime_setup {
   my $self = shift;
 
   $self->_get_dbh->{ib_time_all} = 'ISO';
-}
-
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::InterBase::DateTime::Format;
-
-my $timestamp_format = '%Y-%m-%d %H:%M:%S.%4N'; # %F %T
-my $date_format      = '%Y-%m-%d';
-
-my ($timestamp_parser, $date_parser);
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $timestamp_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $timestamp_format,
-    on_error => 'croak',
-  );
-  return $timestamp_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $timestamp_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $timestamp_format,
-    on_error => 'croak',
-  );
-  return $timestamp_parser->format_datetime(shift);
-}
-
-sub parse_date {
-  shift;
-  require DateTime::Format::Strptime;
-  $date_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $date_format,
-    on_error => 'croak',
-  );
-  return $date_parser->parse_datetime(shift);
-}
-
-sub format_date {
-  shift;
-  require DateTime::Format::Strptime;
-  $date_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $date_format,
-    on_error => 'croak',
-  );
-  return $date_parser->format_datetime(shift);
 }
 
 1;

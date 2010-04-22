@@ -9,7 +9,7 @@ use DBICTest;
 my $no_class = '_DBICTEST_NONEXISTENT_CLASS_';
 
 my $schema = DBICTest->init_schema();
-$schema->storage->datetime_parser_type($no_class);
+$schema->storage->datetime_parse_via($no_class);
 
 my $event = $schema->resultset('Event')->find(1);
 

@@ -11,10 +11,11 @@ use namespace::clean;
 
 __PACKAGE__->sql_limit_dialect ('SkipFirst');
 __PACKAGE__->sql_quote_char ('"');
-__PACKAGE__->datetime_parser_type (
-  'DBIx::Class::Storage::DBI::Informix::DateTime::Format'
-);
 
+__PACKAGE__->datetime_parse_via({
+  datetime => '%Y-%m-%d %H:%M:%S.%5N',
+  date     => '%m/%d/%Y',
+});
 
 __PACKAGE__->mk_group_accessors('simple' => '__last_insert_id');
 
@@ -120,54 +121,6 @@ sub connect_call_datetime_setup {
 
   $ENV{GL_DATE}     = "%m/%d/%Y";
   $ENV{GL_DATETIME} = "%Y-%m-%d %H:%M:%S%F5";
-}
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::Informix::DateTime::Format;
-
-my $timestamp_format = '%Y-%m-%d %H:%M:%S.%5N'; # %F %T
-my $date_format      = '%m/%d/%Y';
-
-my ($timestamp_parser, $date_parser);
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $timestamp_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $timestamp_format,
-    on_error => 'croak',
-  );
-  return $timestamp_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $timestamp_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $timestamp_format,
-    on_error => 'croak',
-  );
-  return $timestamp_parser->format_datetime(shift);
-}
-
-sub parse_date {
-  shift;
-  require DateTime::Format::Strptime;
-  $date_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $date_format,
-    on_error => 'croak',
-  );
-  return $date_parser->parse_datetime(shift);
-}
-
-sub format_date {
-  shift;
-  require DateTime::Format::Strptime;
-  $date_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $date_format,
-    on_error => 'croak',
-  );
-  return $date_parser->format_datetime(shift);
 }
 
 1;

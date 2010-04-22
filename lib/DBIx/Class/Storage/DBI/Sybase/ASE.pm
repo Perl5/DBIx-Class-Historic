@@ -20,9 +20,13 @@ use namespace::clean;
 
 __PACKAGE__->sql_limit_dialect ('RowCountOrGenericSubQ');
 __PACKAGE__->sql_quote_char ([qw/[ ]/]);
-__PACKAGE__->datetime_parser_type(
-  'DBIx::Class::Storage::DBI::Sybase::ASE::DateTime::Format'
-);
+
+__PACKAGE__->datetime_parse_via({
+  datetime => {
+    parse  => '%Y-%m-%dT%H:%M:%S.%3NZ',
+    format => '%m/%d/%Y %H:%M:%S.%3N',
+  },
+});
 
 __PACKAGE__->mk_group_accessors('simple' =>
     qw/_identity _identity_method _blob_log_on_update _parent_storage
@@ -883,9 +887,8 @@ sub connect_call_datetime_setup {
     # of format. Not changing as a bugwards compat, though in reality
     # the only piece that sees the results of $dt object formatting
     # (as opposed to parsing) is the database itself, so theoretically
-    # changing both this SET command and the formatter definition of
-    # ::S::D::Sybase::ASE::DateTime::Format below should be safe and
-    # transparent
+    # changing both this SET command and the formatter definition
+    # should be safe and transparent
 
     $dbh->do('SET DATEFORMAT mdy');
   }
@@ -919,34 +922,6 @@ sub _exec_svp_rollback {
   my ($self, $name) = @_;
 
   $self->_dbh->do("ROLLBACK TRANSACTION $name");
-}
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::Sybase::ASE::DateTime::Format;
-
-my $datetime_parse_format  = '%Y-%m-%dT%H:%M:%S.%3NZ';
-my $datetime_format_format = '%m/%d/%Y %H:%M:%S.%3N';
-
-my ($datetime_parser, $datetime_formatter);
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_parse_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_formatter ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format_format,
-    on_error => 'croak',
-  );
-  return $datetime_formatter->format_datetime(shift);
 }
 
 1;

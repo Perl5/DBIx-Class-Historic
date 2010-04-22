@@ -1,5 +1,9 @@
 Revision history for DBIx::Class
 
+        - Deprecate $storage->datetime_parser_type in favor of new method
+          datetime_parse_via, which also accepts strptime formats (see docs in
+          ::Storage::DBI.) This only affects storage driver writers.
+
 0.08200 2012-08-24 (UTC)
     * Fixes
         - Change one of the new tests for the previous release to not require

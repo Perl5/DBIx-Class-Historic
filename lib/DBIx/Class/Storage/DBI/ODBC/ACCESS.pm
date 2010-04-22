@@ -14,6 +14,10 @@ __PACKAGE__->mk_group_accessors(inherited =>
 
 __PACKAGE__->disable_sth_caching_for_image_insert_or_update(1);
 
+__PACKAGE__->datetime_parse_via({
+  datetime => '%Y-%m-%d %H:%M:%S', # %F %T, no fractional part
+});
+
 =head1 NAME
 
 DBIx::Class::Storage::DBI::ODBC::ACCESS - Support specific to MS Access over ODBC
@@ -111,36 +115,6 @@ sub update {
     && $self->disable_sth_caching_for_image_insert_or_update;
 
   return $self->next::method(@_);
-}
-
-sub datetime_parser_type {
-  'DBIx::Class::Storage::DBI::ODBC::ACCESS::DateTime::Format'
-}
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::ODBC::ACCESS::DateTime::Format;
-
-my $datetime_format = '%Y-%m-%d %H:%M:%S'; # %F %T, no fractional part
-my $datetime_parser;
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->format_datetime(shift);
 }
 
 1;

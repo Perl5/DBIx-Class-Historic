@@ -12,6 +12,10 @@ use namespace::clean;
 
 __PACKAGE__->cursor_class('DBIx::Class::Storage::DBI::ADO::MS_Jet::Cursor');
 
+__PACKAGE__->datetime_parse_via({
+  datetime => '%m/%d/%Y %I:%M:%S %p',
+});
+
 =head1 NAME
 
 DBIx::Class::Storage::DBI::ADO::MS_Jet - Support for MS Access over ADO
@@ -109,36 +113,6 @@ sub select_single {
   _normalize_guids($select, $col_infos, \@row, $self);
 
   return @row;
-}
-
-sub datetime_parser_type {
-  'DBIx::Class::Storage::DBI::ADO::MS_Jet::DateTime::Format'
-}
-
-package # hide from PAUSE
-  DBIx::Class::Storage::DBI::ADO::MS_Jet::DateTime::Format;
-
-my $datetime_format = '%m/%d/%Y %I:%M:%S %p';
-my $datetime_parser;
-
-sub parse_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->parse_datetime(shift);
-}
-
-sub format_datetime {
-  shift;
-  require DateTime::Format::Strptime;
-  $datetime_parser ||= DateTime::Format::Strptime->new(
-    pattern  => $datetime_format,
-    on_error => 'croak',
-  );
-  return $datetime_parser->format_datetime(shift);
 }
 
 1;
