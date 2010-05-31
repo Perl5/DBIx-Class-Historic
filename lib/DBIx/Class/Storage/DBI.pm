@@ -2401,25 +2401,30 @@ sub deployment_statements {
   my $filename = $schema->ddl_filename($type, $version, $dir);
   if(-f $filename)
   {
-      my $fh = $self->_normalize_fh_from_args($filename);
-      my @lines = $self->_normalize_lines(<$fh>);
-      return wantarray ? @lines : join(';', @lines);
+      my $fh = $self->_normalize_fh($filename);
+      return $self->_normalize_sql(<$fh>);
   }
 
   unless (DBIx::Class::Optional::Dependencies->req_ok_for ('deploy') ) {
     $self->throw_exception("Can't deploy without a ddl_dir or " . DBIx::Class::Optional::Dependencies->req_missing_for ('deploy') );
   }
 
-  # sources needs to be a parser arg, but for simplicty allow at top level
+  my $producer_class = "SQL::Translator::Producer::${type}";
+  require SQL::Translator::Parser::DBIx::Class;
+
+  eval "require $producer_class";
+  $self->throw_exception($@) if $@;
+
+  # sources needs to be a parser arg, but for simplicty allow at top level 
   # coming in
   $sqltargs->{parser_args}{sources} = delete $sqltargs->{sources}
       if exists $sqltargs->{sources};
 
   my $tr = SQL::Translator->new(%$sqltargs);
   SQL::Translator::Parser::DBIx::Class::parse( $tr, $schema );
-  my @lines = "SQL::Translator::Producer::${type}"->can('produce')->($tr);
-  @lines = $self->_normalize_lines(@lines);
-  return wantarray ? @lines : join(';', @lines);
+  return $self->_normalize_sql(
+    $producer_class->can('produce')->($tr)
+  );
 }
 
 sub deploy {
@@ -2427,6 +2432,7 @@ sub deploy {
   my @statements = $self->deployment_statements(
     $schema, $type, undef, $dir, { %{ $sqltargs || {} }, no_comments => 1 }
   );
+  return $self->_execute_statements(@statements);
 }
 
 =head2 datetime_parser
@@ -2475,7 +2481,6 @@ returned by databases that don't support replication.
 
 sub is_replicating {
     return;
-
 }
 
 =head2 lag_behind_master
@@ -2490,271 +2495,179 @@ sub lag_behind_master {
     return;
 }
 
-=head2 run_file_against_storage 
+=head2 run_file_against_storage
 
   my @results = $storage->run_file_against_storage($path_to_file)
 
 =over
 
-=item Arguments: (Path::Class::File|String|@Strings)
+=item Arguments: $filehandle | $filename | @filepath
 
 =item Returns: Array of results from executing each statement.
 
 =back
 
-Given a path to file, will try to execute it line by line against the connected
-database engine.  Throws an exception and tries to rollback if an error occurs.
+Given an open filehandle or a filename or a filepath suitable to pass to
+L<Path::Class::File>, will try to execute its contents against the connected
+database engine. The entire operation is rolled into L</txn_do> so a
+rollback is attempted if an error occurs (DDL commands may or may not be
+rolled back depending on the capabilites of the RDBMS)
 
-Will normalize the contents of the file to strip comments and properly deal
-with command scattered across several lines.
+The file contents are processed to strip comments and properly deal with
+statements scattered across several lines.
 
-Will accept either a L<Path::Class::File> object or a string or array that we
-can use to create one.
-
-Returns an array of whatever comes back from executing each statement.  Should
-be true if the script executes anything at all.
+Returns an array of whatever comes back from executing each separate statement
+(not line).  Should be true if the script executed anything at all.
 
 =cut
 
 sub run_file_against_storage {
   my ($self, @args) = @_;
-  my $fh = $self->_normalize_fh_from_args(@args);
-  my @lines = $self->_normalize_lines(<$fh>);
+  my $fh = $self->_normalize_fh(@args);
+  my @lines = $self->_normalize_sql(<$fh>);
   my @statements = $self->_normalize_statements_from_lines(@lines);
+
   return $self->txn_do(sub {
     return $self->_execute_statements(@_);
   }, @statements);
 }
 
-=head2 _execute_statements
-
-  $storage->_execute_statements(@statements)
-
-=over
-
-=item Arguments: Array of Statements
-
-=item Returns: An Array of Results from each executed String
-
-=back
-
-Given a list of @statements as returned my L</_normalize_statements_from_lines>
-try to execute them cleanly.
-
-=cut
-
+#
+# Given a list of @statements as returned my _normalize_sql
+# try to execute them cleanly via txn_do
+#
 sub _execute_statements {
   my ($self, @statements) = @_;
-  if(@statements) {
-    return $self->txn_do(sub {
-      my @return;
-      foreach my $statement (@_) {
-        my $single_statement = ref $statement eq 'ARRAY' ? join(' ',@$statement) : $statement;
-        push @return, $self->_execute_single_statement($single_statement);
-      }
-    return @return;		
-    }, @statements);
-  } else {
+
+  if (! @statements) {
     $self->debugobj->print("No statement to execute!")
-     if $self->debug;	
+      if $self->debug;
+
+    return ();
   }
+
+  return $self->txn_do(sub {
+    map { $self->_execute_single_statement($_) } @_;
+  }, @statements);
 }
 
-=head2 _execute_single_statement
-
-  $storage->_execute_single_statement($statement)
-
-=over
-
-=item Arguments: String
-
-=item Returns: Result of $dbh->do($string) or throws exception
-
-=back
-
-Given a SQL statement, do our best to safely execute it.
-
-=cut
-
+#
+# $dbh->do a single statement while also announcing it via the tracer
+#
 sub _execute_single_statement {
   my ($self, $statement) = @_;
-  if($statement) {
-    return $self->dbh_do(sub {
-      my ($storage, $dbh, $schema, $statement) = @_;
-      my $return;
-      $schema->_query_start($statement);
-      eval {
-        $return = $dbh->do($statement)
-          || $schema->throw_exception("Can't execute line: $statement, Error: ". $dbh->errstr);		
-      };
-      if($@) {
-        carp "$@ (running $statement)";
-      }
-      $schema->_query_end($statement);
-      return $return;
-    }, $self, $statement);
-  }
-  else {
+
+  if (! $statement) {
     $self->debugobj->print("No statement to execute!")
-     if $self->debug;
-    return;
+      if $self->debug;
+
+    return undef;
   }
+
+
+  $self->_query_start($statement);
+
+  my $ret;
+
+  eval {
+    $ret = $self->_dbh->do ($statement);
+
+    if (! $ret) { # in case RaiseError is false
+      $self->throw_exception (
+        "Can't execute statement: $statement\n"
+        . ($self->_dbh->errstr || 'reason unknown')
+      );
+    }
+
+    $self->_query_end($statement);
+
+  };
+  if($@) {
+    carp "$@ (running $statement)";
+  }
+
+  return $ret;
 }
 
-=head2 _normalize_fh_from_args
-
-  my $fh = $storage->_normalize_fh_from_args(qw/share sql defaults.sql/);
-
-=over
-
-=item Arguments: (Path::Class::File|String|@Strings|Filehandle)
-
-=item Returns: A FileHandle
-
-=back
-
-Given arguments, return a $filehandle that is an open read filehandle object
-based on the args.  Accepts a L<Path::Class::File> object or arguments suitable
-for constructing one.  Also will passthru an exiting FileHandle as a sanity
-measure.
-
-Throws an exception if a read filehandle can't be created.
-
-=cut
-
-sub _normalize_fh_from_args {
-  my ($self, @args) = @_;
-  if(my $fh = Scalar::Util::openhandle($args[0])) {
-    return $fh;   
+#
+# Given arguments, return a $filehandle that is an open read filehandle object
+# based on the args. Accepts a L<Path::Class::File> object or arguments suitable
+# for constructing one. Alternatively an open filehandle can be supplied (passed
+# through unmodifed).
+#
+sub _normalize_fh {
+  my $self = shift;
+  if(my $fh = Scalar::Util::openhandle($_[0])) {
+    return $fh;
   } else {
-    my $file = Path::Class::File->new(@args);
+    my $file = Path::Class::File->new(@_);
     open(my $fh, "<", $file) ||
       $self->throw_exception("Can't open file '$file'. Error: $!");
     return $fh;
   }
 }
 
-=head2 _normalize_lines
+#
+# Given an array of strings, as might come out of a sql script file or generated
+# from a SQLT Producer, we normalize it for execution against the given storage
+# engine.  We do our best to strip out comment lines, blank lines and anything
+# else that might cause an error.  We also split lines based on the ';'
+# deliminator, since that's pretty standard. Then we recombine non-terminated
+# lines, so we end up with an array of statements (as opposed to an array of
+# arbitrary lines). Returns an array of statements (no trailing ';' ) in array
+# context, or a string joined by ";\n" in scalar context
+#
+sub _normalize_sql {
+  my $self = shift;
 
-  my @lines = $storage->_normalize_lines(<$fh>);
-  my @lines = $storage->_normalize_lines(@unknown_lines);
+  my $comment = qr/^\s*--/;
+  my $deliminator=qr/;|$/;
 
-=over
+  # we do not assume whether this came from a file or from a
+  # producer - treat it with utmost care
+  my @input = @_;
 
-=item Arguments: (@Strings|Filehandle)
+  my @return;
 
-=item Returns: An Array of Strings.
+  foreach my $line (map { split (/\n+/, $_) } @_) {
 
-=back
+    $line =~ s/\A\s+|\s+\z//g; # trim leading/trailing whitespace
 
-Given an array of strings, as might come out of a sql script file or generated
-from a SQLT Producer, we normalize it for execution against the given storage
-engine.  We do our best to strip out comment lines, blank lines and anything 
-else that might cause an error.  We also split lines based on the ';' 
-deliminator, since that's pretty standard.
+    ## Skip if the line is blank, or a comment line
+    next if ( (! length $line) || $line =~ /^\s* $comment/x );
 
-The idea here is that you should get in clean array of strings.
- 
-=cut
+    ## a line may contain several commands
+    my @parts = $self->_split_sql_line_into_statements($line);
+    warn Dumper \@parts;
 
-sub _normalize_lines {
-  my $self = shift @_;
-  my $comment = qr{--};
-  my @lines;
-  foreach my $line (@_) {
-  $line=~s/\n|\r|\r\n|\n\r//g; ## Clear any type of eol characters 
-    ## Skip if the line is blank, whitespace only or a comment line 
-    if(!$line || $line=~m/^\s* $comment/x || $line=~m/^\s*$/) {
-      next;
-    } else {
-      ## a line may contain several commands
-      my @parts = $self->_split_line_into_statements($line);      
-      ## clean empty or comment only lines
-      @parts = grep { $_ && $_ !~m/^\s* $comment/x } @parts;
-      ## We are going to wrap it all in a transaction anyway
-      @parts = grep { $_ !~ /^(BEGIN|BEGIN TRANSACTION|COMMIT)/m } @parts;
-      ## Some cleanup
-      @parts = map {
-        $_=~s/;\s*?$comment.*?$//m; ## trim off ending comments        
-        $_=~s/^\s*//mg; ## trim leading whitespace
-        $_=~s/\s*$//mg; ## trim ending whitespace
-        $_;
-      } @parts;
-      push @lines, @parts;
-    }
+    ## Intermediate transaction handling can only screw things up
+    @parts = grep { $_ !~ /^(BEGIN|BEGIN TRANSACTION|COMMIT)/im } @parts;
+
+    push @out_lines, @parts;
   }
-  return @lines;
+
+  return wantarray ? @return : join ";\n" @return;
 }
 
-=head2 _split_line_into_statements
-
-  my @statements = $storage->_split_line_into_statements($line);
-
-=over
-
-=item Arguments: String
-
-=item Returns: Array of SQL Statements
-
-=back 
-
-Given a string, returns all the individual SQL statements in that String
-as an Array.
-
-=cut
-
-sub _split_line_into_statements {
+#
+# Given a string, returns all the individual SQL statements in that String
+# as an Array. Factored out for clarity
+#
+sub _split_sql_line_into_statements {
   my ($self, $line) = @_;
-  my $deliminator=qr/;|$/;
+
+
   my $maybe_quoted = qr/
     "[^"]+"
-    |
+      |
     '[^']+'
-    |
-    .+?(?=$deliminator|.)
-  /x;
+      |
+    [^'"]+?
+  /xm;
 
-  return ($line=~m/$maybe_quoted*?$deliminator/g);
+  return ( $line =~ /$maybe_quoted*?$deliminator/gm );
 }
 
-=head2 _normalize_statements_from_lines 
-
-  my @statements = $storage->_normalize_statements_from_lines(@lines)
-
-=over
-
-=item Arguments: Array of Strings
-
-=item Returns: Array of Array References
-
-=back
-
-Give an array of lines, group them into whole statements.  This is to handle
-how a given statement might have been broken across multiple lines
-
-Returns an array of arrayrefs, where each item is an arrayref of statement
-'chunks'.  The idea here is to group statements but preserve the fact that
-an original raw read of a file split statements across multiple lines.  This
-is important since many database engines have limitations as to how many
-columns a line can span.  Additionally, you may wish to write out the
-statements to a file or storage engine and wish to preserve readability
-by not having such lengthy lines.
-
-=cut
-
-sub _normalize_statements_from_lines {
-  my ($self, @lines) = @_;
-  my @statements;
-  my $statement = [];
-  foreach my $line (@lines) {
-    push @{$statement}, $line;
-    if($line=~m/;$/) {
-      push @statements, $statement;
-      $statement = [];
-    }
-  }
-  return @statements;  
-}
 
 =head2 relname_to_table_alias
 
