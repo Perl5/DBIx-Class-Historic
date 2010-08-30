@@ -653,14 +653,32 @@ sub sequence {
 =back
 
 Declare a unique constraint on this source. Call once for each unique
-constraint.
+constraint.  Takes an optional constraint name (which defaults to a value
+created by L</name_unique_constraint> if undefined) and an arrayref of
+field names or field plus parameters.  
 
-  # For UNIQUE (column1, column2)
+  __PACKAGE__->add_unique_constraint(?$NAME?, \@FIELDS);
+
+In this case ?$NAME? is an optional string which must be a valid database
+constraint name for your target storage and where \@FIELDS is an array of
+one or more strings or hash references.
+
+  \@FIELDS == [($COLUMN||{$COLUMN=>\@PARAMS})+] 
+
+In this case @PARAMS would be an array of parameters associated with the 
+constraint.  Examples:
+
+  # For UNIQUE KEY `constraint_name` (column1, column2)
   __PACKAGE__->add_unique_constraint(
     constraint_name => [ qw/column1 column2/ ],
   );
 
-Alternatively, you can specify only the columns:
+  # For UNIQUE KEY `value` (`value`(128))
+  __PACKAGE__->add_unique_constraint(
+    value => [ {value=>[128]} ],
+  );
+
+If the constrain name is left off, as in the following example:
 
   __PACKAGE__->add_unique_constraint([ qw/column1 column2/ ]);
 
@@ -695,12 +713,18 @@ sub add_unique_constraint {
   }
 
   my $name = shift @_;
+  my @flat_cols = map {
+    ref $_
+    ? (keys(%$_))[0]. "(". join(',', @{values(%$_)}). ")"
+    : $_;
+  } @$cols;
 
-  $name ||= $self->name_unique_constraint($cols);
+  $name ||= $self->name_unique_constraint(\@flat_cols);
 
   foreach my $col (@$cols) {
+    my $col_name = ref $col eq 'HASH' ? (keys(%$col))[0] : $col;
     $self->throw_exception("No such column $col on table " . $self->name)
-      unless $self->has_column($col);
+      unless $self->has_column($col_name);
   }
 
   my %unique_constraints = $self->unique_constraints;
