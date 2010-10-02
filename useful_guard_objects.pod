@@ -1,0 +1,201 @@
+=head1 What
+
+Back in 2008 L<DBIx::Class> introduced an object-guard based RDBMS transaction
+control in addition to the more widely known C<< ->txn_do( sub { ... } ) >>.
+With L<this change to perl5|http://perl5.git.perl.org/perl.git/commitdiff/96d9b9cd40f1d98fda790eb12b5cdbeef8b48a81>
+the object-guard becomes a rather dangerous source of silent bugs. A
+L<bug was filed|http://rt.perl.org/rt3/Public/Bug/Display.html?id=76426>
+against perl5 some months ago, but was rejected (hopefully due to insufficient
+understanding of the problem). Read on for details.
+
+=head1 Why
+
+Often a programmer needs to make sure a set of RDBMS operations are atomic
+(the set of operations either completes entirely or not at all). L<DBI> only
+provides a manual control of this process via L<begin_work|DBI/begin_work>
+to issue a C<SQL 'BEGIN'> transaction start, and L<commit|DBI/commit> /
+L<rollback|DBI/rollback> issuing a C<SQL 'COMMIT'> or C<SQL 'ROLLBACK'>
+which finish the transaction with the corresponding outcome.
+
+L<DBIx::Class> provides two ways to automate the handling of these calls.
+
+With L<txn_do|DBIx::Class::Schema/txn_do> a C<SQL 'BEGIN'> is issued before
+execution of the supplied coderef begins. The only two possible outcomes after
+this are:
+
+=over
+
+=item 1
+
+The coderef throws an exception, in which case the exception is caught, a
+C<SQL 'ROLLBACK'> is issued, and the exception is re-thrown.
+
+=item 2
+
+The coderef execution completes succesfully, in which case a C<SQL 'COMMIT'>
+is issued and execution continues.
+
+=back
+
+With the L<object guard|DBIx::Class::Storage::TxnScopeGuard> almost the entire
+transaction is under user control. The C<BEGIN> is issued at the point of the
+guard object instantiation. From this point on there are three possible
+outcomes:
+
+=over
+
+=item 1
+
+The user explicitly commits the transaction by C<< $guard->commit >>, which
+issues a C<SQL 'COMMIT'> and sets a flag on the guard instance, which turns the
+L<DBIx::Class::Storage::TxnScopeGuard/DESTROY> into a noop.
+
+=item 2
+
+The code after the guard instantiation runs normally, and eventually perl leaves
+the scope instantiating the guard, triggering garbage collection. The
+L<DBIx::Class::Storage::TxnScopeGuard/DESTROY> issues a C<SQL 'ROLLBACK'> while
+B<also> issuing a warning about an uncommitted guard leaving scope, alerting
+the user to a potential unintended C<ROLLBACK> scenario in his code (e.g. a
+rogue C<return> in a block)
+
+=item 3
+
+The code following the guard throws an exception, triggering destruction of the
+guard B<before> it had a chance to be C<< ->commit >>ed and before it reached
+the end of the scope which keept the object alive. In this situation the
+C<ROLLBACK> is expected and the warning normally emitted by
+L<DBIx::Class::Storage::TxnScopeGuard/DESTROY> is suppressed by the presence of
+C<$@>
+
+=back
+
+After L<96d9b9c|http://perl5.git.perl.org/perl.git/commitdiff/96d9b9cd40f1d98fda790eb12b5cdbeef8b48a81>
+it is no longer possible to tell apart C<case 2> from C<case 3> above, since $@
+is not visible in C<DESTROY>. With the current state of affairs
+L<DBIx::Class::Storage::TxnScopeGuard> will have no choice but to be adjusted
+to not warn on C<case 3>, which makes it as unwieldy as manual
+C<< ->txn_begin >> / C<< ->txn_commit >> calls, except much more dangerous:
+debugging "why is my data gone" due to B<silent> rollbacks will be harder than
+just writing extra boilerplate any time you need finer transaction control.
+
+=head1 But why not just use the clearly superior txn_do transaction control?
+
+Because it is much more flexible to be variable-bound than scope-bound. For
+example one can easily pass a reference to the guard to an B<unrelated scope>.
+This in turn allows for much clearer code. Compare the following:
+
+  sub with_deferred_constraints {
+    my ($schema, $code, @args) = @_;
+
+    $schema->txn_do ( sub {
+
+      # needs to run in the txn
+      # also the un-set needs to run before a commit
+      $schema->_do_query('alter session set constraints = deferred');
+
+      my $want = wantarray();
+      my @res;
+
+      try {
+        if ($want) {
+          @res = $code->(@args);
+        }
+        elsif (defined $want) {
+          $res[0] = $code->(@args);
+        }
+        else {
+          $code->(@args);
+        }
+      } finally {
+        # unset in either rollback/commit case
+        $self->_do_query('alter session set constraints = immediate');
+      };
+
+      return $want ? @res : $res[0];
+    });
+  }
+
+With its sibling:
+
+  sub with_deferred_constraints {
+    my ($schema, $code, @args) = @_;
+
+    my $txn_guard = $schema->txn_scope_guard (
+      after_begin => sub {
+        $schema->_do_query('alter session set constraints = deferred');
+      },
+      before_commit_or_destroy => sub {
+        $schema->_do_query('alter session set constraints = immediate');
+      },
+    );
+
+    return Context::Preserve::preserve_context (
+      sub { $code->(@args) },
+      after => sub { $txn_guard->commit }
+    );
+  }
+
+Also remember that databases are hateful. In some RDBMS a transaction comes
+with multiple strings attached (like e.g. refusing to start when multiple
+resultset handles are active). Thus code striving to be cross-platform must
+do everything it can to avoid starting a transaction unless absolutely
+necessary. With a transaction scope guard insertion of "this parts needs to
+be atomic" markers becomes much more natural, without weird inversion of
+control flow. Compare:
+
+  sub insert {
+    my ($self, $obj) = @_;
+
+    if (my @rels = $obj->parent_objects) {
+      $self->txn_do ( sub {
+        $_->insert for @rels;
+        $obj->insert
+      });
+    }
+    else {
+      $obj->insert;
+    }
+  }
+
+To code without any duplication:
+
+  sub insert {
+    my ($self, $obj) = @_;
+
+    my $guard;
+
+    for ($obj->parent_objects) {
+      $guard ||= $self->txn_scope_guard;
+      $_->insert;
+    }
+
+    $obj->insert;
+
+    $guard->commit if $guard;
+  }
+
+=head1 But this never worked reliably!
+
+It is true that the following case would silently rollback B<without> any
+indication (warning or otherwise) as to why is the data not in the db:
+
+  sub foo {
+    my $guard = $schema->txn_scope_guard;
+
+    eval {
+      ...
+      die "Hard: With a Vengeance";
+    };
+  }
+
+The user did two stupid things here - he did not handle the exception
+(effectively hiding it), and forgot to handle the instantiated guard.
+Incidentally this sole corner case was used as justification to reject
+L<RT#76426|http://rt.perl.org/rt3/Public/Bug/Display.html?id=76426>.
+
+It is our hope that a different strategy will be adopted that will allow
+introspection of the C<in exception> state, be it via C<$@> or some new
+method (e.g. an argument to C<DESTROY>)
+
+
