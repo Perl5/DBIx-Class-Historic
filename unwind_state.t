@@ -1,7 +1,9 @@
 use warnings;
 use strict;
 
-use Test::More tests => 8 * 3;  # each object runs 3 tests on destroy
+# each object runs 3 tests on destroy
+# 8 regular objects, 5 global variables
+use Test::More tests => 8*3 + 5*3;
 
 use constant {
   REGULAR_GC => 'T.B.D. regular GC constant',
@@ -11,17 +13,20 @@ use constant {
 our $U = 'N/A';  # temporary varname for the proof of conept
 
 # regular GC
+UG->singleton;
 {
   my $g1 = UG->new(REGULAR_GC);
 }
 
 # forced GC
+UG->singleton;
 {
   my $g1 = UG->new(REGULAR_GC);
   undef ($g1);
 }
 
 # normal GC mixed with an exception-triggered GC
+UG->singleton;
 {
   my $g1 = UG->new(REGULAR_GC);
 
@@ -32,6 +37,7 @@ our $U = 'N/A';  # temporary varname for the proof of conept
 }
 
 # GC triggered by lower-scope exception
+UG->singleton;
 {
   my $g1 = UG->new(REGULAR_GC);
 
@@ -54,6 +60,7 @@ sub throw {
   die 'boom';
 }
 
+UG->singleton;
 {
   my $g1 = UG->new(REGULAR_GC);
   eval { call_throw() };
@@ -76,6 +83,10 @@ sub throw {
     bless (\$state, $class);
   }
 
+  sub singleton {
+    $::global_guard ||= shift->new(::REGULAR_GC);
+  }
+
   sub DESTROY {
     {
       my $sub = UG::Sub->new(::REGULAR_GC);
@@ -85,6 +96,8 @@ sub throw {
       my $sub = UG::Sub->new(::EXCJUMP_GC);
       die 'Crap'; # even if not available in DESTROY should signal that $sub above was GCed due to a jump
     };
+
+    undef $::global_guard;
   }
 }
 
