@@ -19,7 +19,8 @@ use base qw/DBIx::Class/;
 __PACKAGE__->mk_group_accessors('simple' => qw/_ordered_columns
   _columns _primaries _unique_constraints name resultset_attributes
   from _relationships column_info_from_storage source_info
-  source_name sqlt_deploy_callback/);
+  source_name sqlt_deploy_callback
+  /);
 
 __PACKAGE__->mk_group_accessors('component_class' => qw/resultset_class
   result_class/);
@@ -1419,7 +1420,11 @@ sub _compare_relationship_keys {
 
 # Returns the {from} structure used to express JOIN conditions
 sub _resolve_join {
-  my ($self, $join, $alias, $seen, $jpath, $parent_force_left) = @_;
+  my ($self, $join, $alias, $seen, $jpath, $parent_force_left, $custom_join_args ) = @_;
+
+  #BEN
+  #.. now also passing in $custom_join_args ..
+  # bad idea? .. looks like $parent_force_left is optional, so this might screw things up!
 
   # we need a supplied one, because we do in-place modifications, no returns
   $self->throw_exception ('You must supply a seen hashref as the 3rd argument to _resolve_join')
@@ -1428,18 +1433,39 @@ sub _resolve_join {
   $self->throw_exception ('You must supply a joinpath arrayref as the 4th argument to _resolve_join')
     unless ref $jpath eq 'ARRAY';
 
+    #BEN
+  $self->throw_exception ('Custom join args must a hashref')
+    if ( defined $custom_join_args && ref($custom_join_args) ne 'HASH' );
+
   $jpath = [@$jpath]; # copy
 
   if (not defined $join) {
     return ();
   }
   elsif (ref $join eq 'ARRAY') {
+
     return
       map {
         $self->_resolve_join($_, $alias, $seen, $jpath, $parent_force_left);
       } @$join;
+
   }
   elsif (ref $join eq 'HASH') {
+
+
+      #BEN
+      # look ahead for custom join args .. and pull then out..
+      my %custom_args;
+      for my $rel (keys %$join) 
+      { 
+          if ( ref($join->{$rel}) eq 'HASH' )
+          {
+              my $hash_ahead = $join->{$rel};
+              %custom_args = map { ( $_ =~ /^\-/ ) ? ( $_ => delete $hash_ahead->{$_} ) : () } keys %{ $hash_ahead };
+          }
+      } 
+
+
 
     my @ret;
     for my $rel (keys %$join) {
@@ -1455,8 +1481,11 @@ sub _resolve_join {
         $rel, ($seen->{$rel} && $seen->{$rel} + 1)
       );
 
+      # BEN 
+      # now passing in the hashref of custom_args we looked-ahead for..
+
       push @ret, (
-        $self->_resolve_join($rel, $alias, $seen, [@$jpath], $force_left),
+        $self->_resolve_join($rel, $alias, $seen, [@$jpath], $force_left, \%custom_args),
         $self->related_source($rel)->_resolve_join(
           $join->{$rel}, $as, $seen, [@$jpath, { $rel => $as }], $force_left
         )
@@ -1469,6 +1498,7 @@ sub _resolve_join {
     $self->throw_exception("No idea how to resolve join reftype ".ref $join);
   }
   else {
+
     my $count = ++$seen->{$join};
     my $as = $self->storage->relname_to_table_alias(
       $join, ($count > 1 && $count)
@@ -1478,7 +1508,9 @@ sub _resolve_join {
       or $self->throw_exception("No such relationship $join on " . $self->source_name);
 
     my $rel_src = $self->related_source($join);
-    return [ { $as => $rel_src->from,
+
+
+    my $return  = [ { $as => $rel_src->from,
                -rsrc => $rel_src,
                -join_type => $parent_force_left
                   ? 'left'
@@ -1493,8 +1525,10 @@ sub _resolve_join {
                -alias => $as,
                -relation_chain_depth => $seen->{-relation_chain_depth} || 0,
              },
-             $self->_resolve_condition($rel_info->{cond}, $as, $alias, $join)
+             $self->_resolve_condition($rel_info->{cond}, $as, $alias, $join, $custom_join_args)
           ];
+
+    return $return;
   }
 }
 
@@ -1553,20 +1587,35 @@ our $UNRESOLVABLE_CONDITION = \ '1 = 0';
 # list of non-triviail values (notmally conditions) returned as a part
 # of a joinfree condition hash
 sub _resolve_condition {
-  my ($self, $cond, $as, $for, $relname) = @_;
+  my ($self, $cond, $as, $for, $relname, $custom_join_args) = @_;
+
+  #BEN
+  #.. now also passing in $custom_join_args for use when executing
+  # any conditions that are anon-routines..
+  #
+  $custom_join_args ||= {};  # ensure its a hashref..
 
   my $obj_rel = !!blessed $for;
+
 
   if (ref $cond eq 'CODE') {
     my $relalias = $obj_rel ? 'me' : $as;
 
-    my ($crosstable_cond, $joinfree_cond) = $cond->({
+    my ($crosstable_cond, $joinfree_cond) = $cond->(
+    {
       self_alias => $obj_rel ? $as : $for,
       foreign_alias => $relalias,
       self_resultsource => $self,
       foreign_relname => $relname || ($obj_rel ? $as : $for),
-      self_rowobj => $obj_rel ? $for : undef
-    });
+      self_rowobj => $obj_rel ? $for : undef,
+
+      # BEN .. should we add to hash or pass seprately?.. does it matter?
+      custom_join_args => $custom_join_args,
+
+    },
+
+    );
+
 
     my $cond_cols;
     if ($joinfree_cond) {

@@ -121,6 +121,36 @@ __PACKAGE__->has_many(
 );
 
 
+
+#BEN - testing custom relationship that use on-the-fly -custom_args ...
+__PACKAGE__->has_many(
+  cds_custom => 'DBICTest::Schema::CD',
+  sub {
+    my $args = shift;
+
+    # pull the custome_join_args from the passed in args hashref...
+    my $cond_args = ( $args->{custom_join_args} || {} );
+
+    # ..little check..
+    die ("Could not build 'cds_custom' custom join... no 'custom_join_args' received!") 
+        unless exists $cond_args->{'-custom_args'} && ref($cond_args->{'-custom_args'}) eq 'ARRAY';
+
+    # make use for custom args...
+    my $min_year = $cond_args->{'-custom_args'}->[0];
+    my $max_year = $cond_args->{'-custom_args'}->[1];
+
+    return (
+      { "$args->{foreign_alias}.artist" => { -ident => "$args->{self_alias}.artistid" },
+        "$args->{foreign_alias}.year"   => { '>' => $min_year, '<' => $max_year },
+      }
+    );
+  }
+);
+
+
+
+
+
 __PACKAGE__->has_many(
     cds_unordered => 'DBICTest::Schema::CD'
 );

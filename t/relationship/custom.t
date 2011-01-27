@@ -211,4 +211,31 @@ is_deeply (
   'Prefetched singles in proper order'
 );
 
+
+
+
+
+#BEN - tested use to get basic idea of custom join args working...
+diag("Testing using the custom relation setup...");
+my $cds_custom = $schema->resultset("Artist")->search
+(
+    {},
+    {
+        join => { cds_custom => { '-custom_args' => [qw/1975 1978/] } },
+    }
+);
+is ( $cds_custom->count, 6, "got the right number of results");
+
+
+
+
+
+
+
+
+
+
+
+
+
 done_testing;
