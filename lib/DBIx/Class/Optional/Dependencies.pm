@@ -24,6 +24,11 @@ my $replicated = {
   %$moose_basic,
 };
 
+my $poe_easydbi = {
+  'POE'                           => '0',
+  'POE::Component::EasyDBI'       => '0',
+};
+
 my $admin_basic = {
   %$moose_basic,
   %$json_any,
@@ -94,6 +99,19 @@ my $reqs = {
     },
   },
 
+  poe_easydbi => {
+    req => $poe_easydbi,
+    pod => {
+      title => 'Storage::DBI::POE::EasyDBI',
+      desc => 'Modules required for L<DBIx::Class::Storage::DBI::POE::EasyDBI>',
+    },
+  },
+
+  test_poe_easydbi => {
+    req => {
+      %$poe_easydbi,
+    },
+  },
 
   admin => {
     req => {
