@@ -18,7 +18,7 @@ use POE::Component::EasyDBI;
 use namespace::clean;
 
 __PACKAGE__->mk_group_accessors(simple => qw/
-  _normal_storage
+  _normal_storage _easydbi
 /);
 
 my @proxy_to_normal_storage = qw/
@@ -56,10 +56,6 @@ complete (the rest of the application, that does not depend on L<DBIx::Class>
 still runs.) To keep your app responsive, I recommend avoiding long-running
 queries.
 
-=head2 transactions
-
-Transactions are not currently supported at all.
-
 =cut
 
 # make a normal storage for proxying some methods
@@ -86,6 +82,34 @@ for my $method (@proxy_to_normal_storage) {
     my $self = shift;
     return $self->_normal_storage->$replaced(@_);
   };
+}
+
+sub _init {
+  my $self = shift;
+
+  my ($dsn, $user, $pass, $opts) = @{ $self->_dbi_connect_info };
+
+  $self->throw_exception(
+    'coderef connect_info not supported by '.__PACKAGE__
+  ) if ref $dsn eq 'CODE';
+
+  my $easydbi = POE::Component::EasyDBI->new(
+    alias    => '',
+    dsn      => $dsn,
+    username => $user,
+    password => $pass,
+    options  => $opts
+  );
+
+  $self->_easydbi($easydbi);
+}
+
+sub DESTROY {
+  my $self = shift;
+
+  if ($self->_easydbi) {
+    $self->_easydbi->shutdown;
+  }
 }
 
 1;
