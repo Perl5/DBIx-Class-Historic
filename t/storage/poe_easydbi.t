@@ -49,11 +49,6 @@ POE::Session->create(
       isnt $seq, '0,1,2,3,4,5', 'records were not inserted synchronously';
 
       $_[HEAP]{creates_done_ran} = 1;
-
-      $_[KERNEL]->yield('cleanup');
-    },
-    cleanup => sub {
-      delete $_[HEAP]{schema}; # FIXME this should not be necessary
     },
   },
 );

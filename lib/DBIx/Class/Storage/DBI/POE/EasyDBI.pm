@@ -101,6 +101,8 @@ sub _init {
     options  => $opts
   );
 
+  $poe_kernel->detach_child($easydbi->ID);
+
   $self->_easydbi($easydbi);
 }
 
