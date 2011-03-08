@@ -21,6 +21,7 @@ POE::Session->create(
     _start => sub {
       $_[HEAP]{schema} = DBICTest->init_schema(
         no_populate  => 1,
+        sqlite_use_file => 1,
         storage_type => '::DBI::POE::EasyDBI',
       );
       $_[KERNEL]->yield('do_creates');
