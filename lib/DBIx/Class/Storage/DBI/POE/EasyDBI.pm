@@ -15,6 +15,7 @@ use Carp::Clan qw/^DBIx::Class|^Try::Tiny/;
 use Sub::Name;
 use Scalar::Util 'weaken';
 use POE;
+use POE::Session::YieldCC;
 use POE::Component::EasyDBI;
 use namespace::clean;
 
@@ -117,19 +118,32 @@ sub _init {
     my $storage = $self;
     weaken $storage;
 
-    POE::Session->create(
+    POE::Session::YieldCC->create(
       inline_states => {
         _start => sub {
           $_[KERNEL]->alias_set($session_alias);
           $_[KERNEL]->detach_myself;
         },
+        insert => sub {
+          return $_[SESSION]->yieldCC('do_insert', $_[ARG0]);
+        },
+        do_insert => sub {
+          my ($cont, $args) = @_[ARG0, ARG1];
+
+          $args = $args->[0];
+
+          $storage->_easydbi->insert(
+            %$args,
+            event => 'insert_done',
+            _cont => $cont,
+          );
+        },
         insert_done => sub {
           my $res = $_[ARG0];
 
-          my $ret = $storage->_promises->{$res->{_promise_id}} = {};
+          my $cont = delete $res->{_cont};
 
-          $ret->{error} = $res->{error};
-          $ret->{done}  = 1;
+          $cont->($res);
         },
         shutdown => sub {
           $_[KERNEL]->alias_remove($session_alias);
@@ -148,21 +162,10 @@ sub insert {
   my $table_name = $source->from;
   $table_name = $$table_name if ref $table_name;
 
-  my $promise_id = $promise_cntr++;
-
-  $self->_easydbi->insert(
+  my $res = $poe_kernel->call($self->_session_alias, 'insert', {
     table => $table_name,
     hash => $to_insert,
-    session => $self->_session_alias,
-    event => 'insert_done',
-    _promise_id => $promise_id,
-  );
-
-  while (not $self->_promises->{$promise_id}{done}) {
-    $poe_kernel->run_one_timeslice;
-  }
-
-  my $res = delete $self->_promises->{$promise_id};
+  });
 
   $self->throw_exception($res->{error}) if $res->{error};
 }
