@@ -147,14 +147,11 @@ sub _init {
         },
         shutdown => sub {
           $_[KERNEL]->alias_remove($session_alias);
-          $session_num--;
         },
       },
     );
   }
 }
-
-my $promise_cntr = 1;
 
 sub insert {
   my ($self, $source, $to_insert) = @_;
