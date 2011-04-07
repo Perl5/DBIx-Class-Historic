@@ -45,6 +45,11 @@ sub add_relationship {
   $class->register_relationship($rel => $source->relationship_info($rel));
 }
 
+sub register_m2m {
+  my ($class, $rel, @rest) = @_;
+  my $source = $class->result_source_instance;
+  $source->register_m2m( $rel => @rest );
+}
 
 # legacy resultset_class accessor, seems to be used by cdbi only
 sub iterator_class { shift->result_source_instance->resultset_class(@_) }

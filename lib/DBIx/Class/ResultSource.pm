@@ -18,7 +18,7 @@ use base qw/DBIx::Class/;
 __PACKAGE__->mk_group_accessors(simple => qw/
   source_name name source_info
   _ordered_columns _columns _primaries _unique_constraints
-  _relationships resultset_attributes
+  _relationships _many_to_many resultset_attributes
   column_info_from_storage
 /);
 
@@ -119,6 +119,7 @@ sub new {
   $new->{_ordered_columns} = [ @{$new->{_ordered_columns}||[]}];
   $new->{_columns} = { %{$new->{_columns}||{}} };
   $new->{_relationships} = { %{$new->{_relationships}||{}} };
+  $new->{_many_to_many}  = { %{$new->{_many_to_many}||{}} };
   $new->{name} ||= "!!NAME NOT SET!!";
   $new->{_columns_info_loaded} ||= 0;
   return $new;
@@ -1514,6 +1515,76 @@ sub _resolve_join {
           ];
   }
 }
+
+=head2 m2ms
+
+=over 4
+
+=item Arguments: None
+
+=item Return value: List of many_to_many relationship names
+
+=back
+
+  my @m2m_names = $source->m2ms();
+
+Returns all many_to_many names for this source.
+b
+=cut
+
+sub m2ms {
+    my ( $self ) = @_;
+    return keys %{ $self->_many_to_many };
+}
+
+=head2 m2m_info
+
+=over 4
+
+=item Arguments: $m2m_name
+
+=item Return value: Hashref of relation data,
+
+=back
+
+Returns a hashref of information for the specified many_to_many relationship
+name. The keys/values are:
+
+  { rel   => $local_relname,
+    frel  => $foreign_relname,
+    attrs => { ... },
+  }
+
+=cut
+
+sub m2m_info {
+    my ( $self, $m ) = @_;
+    return $self->_many_to_many->{ $m };
+}
+sub register_m2m {
+    my ( $self, $m, $info ) = @_;
+    $self->_many_to_many->{$m} = $info;
+}
+
+=head2 has_m2m
+
+=over 4
+
+=item Arguments: $m2m_name
+
+=item Return value: 1/0 (true/false)
+
+=back
+
+Returns true if the source has a many_to_many of this name, false otherwise.
+
+=cut
+
+sub has_m2m {
+    my ( $self, $m ) = @_;
+    return exists $self->_many_to_many->{ $m };
+}
+
 
 sub pk_depends_on {
   carp 'pk_depends_on is a private method, stop calling it';

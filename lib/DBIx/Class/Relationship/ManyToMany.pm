@@ -35,6 +35,13 @@ sub many_to_many {
     my $set_meth = "set_${meth}";
     my $rs_meth = "${meth}_rs";
 
+    #record many-to-many metadata
+    $class->register_m2m( $meth, {
+        rel   => $rel,
+        frel  => $f_rel,
+        ( defined $rel_attrs ? (attrs => $rel_attrs) : ()),
+    });
+
     for ($add_meth, $remove_meth, $set_meth, $rs_meth) {
       if ( $class->can ($_) ) {
         carp (<<"EOW") unless $ENV{DBIC_OVERWRITE_HELPER_METHODS_OK};
