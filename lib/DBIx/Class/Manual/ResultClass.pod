@@ -8,7 +8,7 @@ a DB query
 
   package My::Schema::Result::Track;
 
-  use parent 'DBIx::Class::Core';
+  use base 'DBIx::Class::Core';
 
   __PACKAGE__->table('tracks');
 
@@ -46,6 +46,31 @@ aggregate the documentation of various methods available on a typical
 C<Result Class>. This document serves as a general overview of C<Result Class>
 declaration best practices, and offers an index of the available methods
 (and the Components/Roles which provide them).
+
+=head1 INITIALIZATION METHODS
+
+=head2 table_class
+
+  __PACKAGE__->table_class('DBIx::Class::ResultSource::View')
+
+The accessor holds the class name from which the result source instance of
+this result class will be derived. If not specified defaults to
+L<DBIx::Class::ResultSource::Table>.
+
+=head2 table
+
+  __PACKAGE__->table('artists');
+
+See L<AUTHOR|DBIx::Class/AUTHOR> and L<CONTRIBUTORS|DBIx::Class/CONTRIBUTORS> in DBIx::Class
+Instantiates a result source instance and sets its
+L<name|DBIx::Class::ResultSource/name> to the supplied argument. If called
+without arguments proxies to L<name|DBIx::Class::ResultSource/name>.
+
+=for todo
+=head1 RESULTSOURCE METADATA METHODS
+
+=for todo
+=head1 DATA INSTANCE MANIPULATION METHODS
 
 =head1 AUTHOR AND CONTRIBUTORS
 
