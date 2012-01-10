@@ -490,7 +490,9 @@ talexb: Alex Beamish <talexb@gmail.com>
 
 tamias: Ronald J Kimball <rjk@tamias.net>
 
-teejay : Aaron Trevena <teejay@cpan.org>
+teejay: Aaron Trevena <teejay@cpan.org>
+
+timbunce: Tim Bunce <Tim.Bunce@pobox.com>
 
 Todd Lipcon
 
