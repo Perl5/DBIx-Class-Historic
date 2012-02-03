@@ -209,7 +209,7 @@ SQL
 
 # test _insert_bulk using populate.
   SKIP: {
-    skip '_insert_bulk not supported', 4
+    skip '_insert_bulk not supported', 1
       unless $storage_type !~ /NoBindVars/i;
 
     lives_ok {
@@ -245,7 +245,7 @@ SQL
 
 # make sure _insert_bulk works a second time on the same connection
   SKIP: {
-    skip '_insert_bulk not supported', 3
+    skip '_insert_bulk not supported', 1
       unless $storage_type !~ /NoBindVars/i;
 
     lives_ok {
@@ -292,7 +292,7 @@ SQL
 
 # now test _insert_bulk with IDENTITY_INSERT
   SKIP: {
-    skip '_insert_bulk not supported', 3
+    skip '_insert_bulk not supported', 1
       unless $storage_type !~ /NoBindVars/i;
 
     lives_ok {
@@ -333,9 +333,8 @@ SQL
   });
   is $subq_rs->count, 11, 'correlated subquery';
 
-# mostly stolen from the blob stuff Nniuq wrote for t/73oracle.t
   SKIP: {
-    skip 'TEXT/IMAGE support does not work with FreeTDS', 22
+    skip 'TEXT/IMAGE support does not work with FreeTDS', 1
       if $schema->storage->_using_freetds;
 
     my $dbh = $schema->storage->_dbh;
@@ -458,7 +457,7 @@ SQL
     # now try _insert_bulk with blobs and a non-blob which also happens to be an
     # identity column
     SKIP: {
-      skip 'no _insert_bulk without placeholders', 4
+      skip 'no _insert_bulk without placeholders', 1
         if $storage_type =~ /NoBindVars/i;
 
       $rs->delete;

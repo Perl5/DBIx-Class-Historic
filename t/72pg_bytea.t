@@ -7,15 +7,15 @@ use Try::Tiny;
 use lib qw(t/lib);
 use DBICTest;
 
-plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('rdbms_pg')
-  unless DBIx::Class::Optional::Dependencies->req_ok_for ('rdbms_pg');
-
 my ($dsn, $dbuser, $dbpass) = @ENV{map { "DBICTEST_PG_${_}" } qw/DSN USER PASS/};
 
 plan skip_all => 'Set $ENV{DBICTEST_PG_DSN}, _USER and _PASS to run this test'
   unless ($dsn && $dbuser);
 
-my $schema = DBICTest::Schema->connect($dsn, $dbuser, $dbpass, { AutoCommit => 1 });
+plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_pg')
+  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_pg');
+
+my $schema = DBICTest::Schema->connect( $dsn, $dbuser, $dbpass );
 
 if ($schema->storage->_server_info->{normalized_dbms_version} >= 9.0) {
   if (not try { DBD::Pg->VERSION('2.17.2') }) {

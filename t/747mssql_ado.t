@@ -8,16 +8,15 @@ use DBIx::Class::Optional::Dependencies ();
 use lib qw(t/lib);
 use DBICTest;
 
-plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_mssql_ado')
-  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_mssql_ado');
-
 # Example DSN (from frew):
 # dbi:ADO:PROVIDER=sqlncli10;SERVER=tcp:172.24.2.10;MARS Connection=True;Initial Catalog=CIS;UID=cis_web;PWD=...;DataTypeCompatibility=80;
-
 my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_MSSQL_ADO_${_}" } qw/DSN USER PASS/};
 
 plan skip_all => 'Set $ENV{DBICTEST_MSSQL_ADO_DSN}, _USER and _PASS to run this test'
   unless ($dsn && $user);
+
+plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_mssql_ado')
+  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_mssql_ado');
 
 DBICTest::Schema->load_classes(qw/VaryingMAX ArtistGUID/);
 

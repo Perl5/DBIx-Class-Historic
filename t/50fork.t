@@ -7,15 +7,16 @@ use lib qw(t/lib);
 use DBICTest;
 use DBIx::Class::Optional::Dependencies ();
 
+# set early - used in END
 my $main_pid = $$;
-
-plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('rdbms_pg')
-  unless DBIx::Class::Optional::Dependencies->req_ok_for ('rdbms_pg');
 
 my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_PG_${_}" } qw/DSN USER PASS/};
 
 plan skip_all => 'Set $ENV{DBICTEST_PG_DSN}, _USER and _PASS to run this test'
       . ' (note: creates and drops a table named artist!)' unless ($dsn && $user);
+
+plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('rdbms_pg')
+  unless DBIx::Class::Optional::Dependencies->req_ok_for ('rdbms_pg');
 
 # README: If you set the env var to a number greater than 10,
 #   we will use that many children

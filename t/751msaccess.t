@@ -13,15 +13,16 @@ my ($dsn,  $user,  $pass)  = @ENV{map { "DBICTEST_MSACCESS_ODBC_${_}" } qw/DSN U
 my ($dsn2, $user2, $pass2) = @ENV{map { "DBICTEST_MSACCESS_ADO_${_}" }  qw/DSN USER PASS/};
 
 plan skip_all => 'Test needs ' .
-  (join ' or ', map { $_ ? $_ : () }
+  (join ' and/or ', map { $_ ? $_ : () }
     DBIx::Class::Optional::Dependencies->req_missing_for('test_rdbms_msaccess_odbc'),
     DBIx::Class::Optional::Dependencies->req_missing_for('test_rdbms_msaccess_ado'))
-  unless
+  unless (
+    (not $dsn || $dsn2)
+      or
     $dsn && DBIx::Class::Optional::Dependencies->req_ok_for('test_rdbms_msaccess_odbc')
-    or
+      or
     $dsn2 && DBIx::Class::Optional::Dependencies->req_ok_for('test_rdbms_msaccess_ado')
-    or
-    (not $dsn || $dsn2);
+  );
 
 DBICTest::Schema->load_classes('ArtistGUID');
 
@@ -274,10 +275,9 @@ EOF
   is $row->artistid, $current_artistid+2,
     'autoincrement column functional aftear empty insert';
 
-# test blobs (stolen from 73oracle.t)
-
-# turn off horrendous binary DBIC_TRACE output
+# test blobs
   {
+    # turn off horrendous binary DBIC_TRACE output
     local $schema->storage->{debug} = 0;
 
     eval { local $^W = 0; $dbh->do('DROP TABLE bindtype_test') };

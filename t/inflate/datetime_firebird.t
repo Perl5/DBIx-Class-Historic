@@ -30,9 +30,10 @@ for my $prefix (keys %$env2optdep) { SKIP: {
 
   my ($dsn, $user, $pass) = map { $ENV{"${prefix}_$_"} } qw/DSN USER PASS/;
 
-  next unless $dsn;
-
   note "Testing with ${prefix}_DSN";
+
+  skip ("Skipping ${prefix}_DSN tests - envvar not set", 1 )
+    unless $dsn;
 
   skip ("Testing with ${prefix}_DSN needs " . DBIx::Class::Optional::Dependencies->req_missing_for( $env2optdep->{$prefix} ), 1)
     unless  DBIx::Class::Optional::Dependencies->req_ok_for($env2optdep->{$prefix});

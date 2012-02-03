@@ -12,7 +12,7 @@ my ($dsn,  $user,  $pass)  = @ENV{map { "DBICTEST_MSACCESS_ODBC_${_}" } qw/DSN U
 my ($dsn2, $user2, $pass2) = @ENV{map { "DBICTEST_MSACCESS_ADO_${_}" }  qw/DSN USER PASS/};
 
 plan skip_all => 'Test needs ' .
-  (join ' and ', map { $_ ? $_ : () }
+  (join ' and one or both of ', map { $_ ? $_ : () }
     DBIx::Class::Optional::Dependencies->req_missing_for('test_dt'),
     (join ' or ', map { $_ ? $_ : () }
       DBIx::Class::Optional::Dependencies->req_missing_for('test_rdbms_msaccess_odbc'),

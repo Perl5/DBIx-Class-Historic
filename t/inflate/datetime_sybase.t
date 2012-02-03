@@ -9,20 +9,20 @@ use DBIx::Class::Optional::Dependencies ();
 use lib qw(t/lib);
 use DBICTest;
 
-plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_dt')
-. ' and ' .
-DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_ase')
-  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_dt')
-    && DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_ase');
-
 my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_SYBASE_${_}" } qw/DSN USER PASS/};
 
-if (not ($dsn && $user)) {
-  plan skip_all =>
-    'Set $ENV{DBICTEST_SYBASE_DSN}, _USER and _PASS to run this test' .
-    "\nWarning: This test drops and creates a table called 'track' and " .
-    "'event_small_dt'";
-}
+if (not ($dsn && $user)) { plan skip_all => join(' ',
+    'Set $ENV{DBICTEST_SYBASE_DSN}, _USER and _PASS to run this test',
+    "Warning: This test drops and creates a table called 'track' and ",
+    "'event_small_dt'",
+) }
+
+plan skip_all => 'Test needs ' . join (' and ', map { $_ ? $_ : () } (
+  DBIx::Class::Optional::Dependencies->req_missing_for ('test_dt'),
+  DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_ase'),
+) )
+  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_dt')
+    && DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_ase');
 
 DBICTest::Schema->load_classes('EventSmallDT');
 

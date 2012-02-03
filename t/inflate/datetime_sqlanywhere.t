@@ -11,7 +11,7 @@ my ($dsn, $user, $pass)    = @ENV{map { "DBICTEST_SQLANYWHERE_${_}" }      qw/DS
 my ($dsn2, $user2, $pass2) = @ENV{map { "DBICTEST_SQLANYWHERE_ODBC_${_}" } qw/DSN USER PASS/};
 
 plan skip_all => 'Test needs ' .
-  (join ' and ', map { $_ ? $_ : () }
+  (join ' and one or both of ', map { $_ ? $_ : () }
     DBIx::Class::Optional::Dependencies->req_missing_for('test_dt'),
     (join ' or ', map { $_ ? $_ : () }
       DBIx::Class::Optional::Dependencies->req_missing_for('test_rdbms_sqlanywhere'),

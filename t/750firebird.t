@@ -9,6 +9,13 @@ use Try::Tiny;
 use lib qw(t/lib);
 use DBICTest;
 
+# Example DSNs:
+# dbi:Firebird:db=/var/lib/firebird/2.5/data/hlaghdb.fdb
+# dbi:InterBase:db=/var/lib/firebird/2.5/data/hlaghdb.fdb
+
+# Example ODBC DSN:
+# dbi:ODBC:Driver=Firebird;Dbname=/var/lib/firebird/2.5/data/hlaghdb.fdb
+
 my $env2optdep = {
   DBICTEST_FIREBIRD => 'test_rdbms_firebird',
   DBICTEST_FIREBIRD_INTERBASE => 'test_rdbms_firebird_interbase',
@@ -25,24 +32,16 @@ plan skip_all => join (' ',
   'and "nonpkid_seq" and the trigger "artist_bi".',
 ) unless grep { $ENV{"${_}_DSN"} } keys %$env2optdep;
 
-# tests stolen from 749sybase_asa.t
-
-# Example DSNs:
-# dbi:Firebird:db=/var/lib/firebird/2.5/data/hlaghdb.fdb
-# dbi:InterBase:db=/var/lib/firebird/2.5/data/hlaghdb.fdb
-
-# Example ODBC DSN:
-# dbi:ODBC:Driver=Firebird;Dbname=/var/lib/firebird/2.5/data/hlaghdb.fdb
-
 my $schema;
 
 for my $prefix (keys %$env2optdep) { SKIP: {
 
   my ($dsn, $user, $pass) = map { $ENV{"${prefix}_$_"} } qw/DSN USER PASS/;
 
-  next unless $dsn;
-
   note "Testing with ${prefix}_DSN";
+
+  skip ("Skipping ${prefix}_DSN tests - envvar not set", 1 )
+    unless $dsn;
 
   skip ("Testing with ${prefix}_DSN needs " . DBIx::Class::Optional::Dependencies->req_missing_for( $env2optdep->{$prefix} ), 1)
     unless  DBIx::Class::Optional::Dependencies->req_ok_for($env2optdep->{$prefix});
@@ -263,7 +262,7 @@ EOF
       if $schema->storage->dbh->{CachedKids}{$_}->FETCH('Active');
   }
 
-# test blobs (stolen from 73oracle.t)
+# test blobs
   eval { $dbh->do('DROP TABLE "bindtype_test"') };
   $dbh->do(q[
   CREATE TABLE "bindtype_test"

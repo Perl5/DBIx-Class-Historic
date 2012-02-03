@@ -9,40 +9,35 @@ use DBIx::Class::Optional::Dependencies ();
 use lib qw(t/lib);
 use DBICTest;
 
-my ($dsn, $user, $pass)    = @ENV{map { "DBICTEST_SQLANYWHERE_${_}" }      qw/DSN USER PASS/};
-my ($dsn2, $user2, $pass2) = @ENV{map { "DBICTEST_SQLANYWHERE_ODBC_${_}" } qw/DSN USER PASS/};
+my $env2optdep = {
+  DBICTEST_SQLANYWHERE => 'test_rdbms_sqlanywhere',
+  DBICTEST_SQLANYWHERE_ODBC => 'test_rdbms_sqlanywhere_odbc',
+};
 
-plan skip_all => 'Test needs ' .
-  (join ' or ', map { $_ ? $_ : () }
-    DBIx::Class::Optional::Dependencies->req_missing_for('test_rdbms_sqlanywhere'),
-    DBIx::Class::Optional::Dependencies->req_missing_for('test_rdbms_sqlanywhere_odbc'))
-  unless
-    $dsn && DBIx::Class::Optional::Dependencies->req_ok_for('test_rdbms_sqlanywhere')
-    or
-    $dsn2 && DBIx::Class::Optional::Dependencies->req_ok_for('test_rdbms_sqlanywhere_odbc')
-    or
-    (not $dsn || $dsn2);
+plan skip_all => join (' ',
+  'Set $ENV{DBICTEST_SQLANYWHERE_DSN} and/or $ENV{DBICTEST_SQLANYWHERE_ODBC_DSN},',
+  '_USER and _PASS to run these tests.',
 
-DBICTest::Schema->load_classes('ArtistGUID');
-
-# tests stolen from 748informix.t
-
-plan skip_all => <<'EOF' unless $dsn || $dsn2;
-Set $ENV{DBICTEST_SQLANYWHERE_DSN} and/or $ENV{DBICTEST_SQLANYWHERE_ODBC_DSN},
-_USER and _PASS to run these tests
-EOF
-
-my @info = (
-  [ $dsn,  $user,  $pass  ],
-  [ $dsn2, $user2, $pass2 ],
-);
+  'WARNING: this test creates and drops the tables "artist", "bindtype_test" and',
+  '"sequence_test"; the generators "gen_artist_artistid", "pkid1_seq", "pkid2_seq"',
+  'and "nonpkid_seq" and the trigger "artist_bi".',
+) unless grep { $ENV{"${_}_DSN"} } keys %$env2optdep;
 
 my $schema;
 
-foreach my $info (@info) {
-  my ($dsn, $user, $pass) = @$info;
+DBICTest::Schema->load_classes('ArtistGUID');
 
-  next unless $dsn;
+for my $prefix (keys %$env2optdep) { SKIP: {
+
+  my ($dsn, $user, $pass) = map { $ENV{"${prefix}_$_"} } qw/DSN USER PASS/;
+
+  note "Testing with ${prefix}_DSN";
+
+  skip ("Skipping ${prefix}_DSN tests - envvar not set", 1 )
+    unless $dsn;
+
+  skip ("Testing with ${prefix}_DSN needs " . DBIx::Class::Optional::Dependencies->req_missing_for( $env2optdep->{$prefix} ), 1)
+    unless  DBIx::Class::Optional::Dependencies->req_ok_for($env2optdep->{$prefix});
 
   $schema = DBICTest::Schema->connect($dsn, $user, $pass, {
     auto_savepoint => 1
@@ -142,7 +137,7 @@ EOF
       'empty insert works';
   }
 
-# test blobs (stolen from 73oracle.t)
+# test blobs
   eval { $dbh->do('DROP TABLE bindtype_test') };
   $dbh->do(qq[
   CREATE TABLE bindtype_test
@@ -254,7 +249,7 @@ SQL
     is try { $row_from_db->a_guid }, $row->a_guid,
       'NON-PK GUID round trip (via ->search->all)';
   }
-}
+}}
 
 done_testing;
 
