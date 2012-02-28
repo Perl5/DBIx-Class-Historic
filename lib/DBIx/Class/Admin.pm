@@ -559,9 +559,6 @@ sub select {
 sub _confirm {
   my ($self) = @_;
 
-  # mainly here for testing
-  return 1 if ($self->meta->get_attribute('_confirm')->get_value($self));
-
   print "Are you sure you want to do this? (type YES to confirm) \n";
   my $response = <STDIN>;
 

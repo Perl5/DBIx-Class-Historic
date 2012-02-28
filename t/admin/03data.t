@@ -15,6 +15,11 @@ BEGIN {
 
 use_ok 'DBIx::Class::Admin';
 
+{
+  # no questions
+  no warnings 'redefine';
+  *DBIx::Class::Admin::_confirm = sub { 1 };
+}
 
 { # test data maniplulation functions
 
@@ -27,7 +32,6 @@ use_ok 'DBIx::Class::Admin';
     schema_class=> "DBICTest::Schema",
     connect_info => $schema->storage->connect_info(),
     quiet  => 1,
-    _confirm=>1,
   );
   isa_ok ($admin, 'DBIx::Class::Admin', 'create the admin object');
 
