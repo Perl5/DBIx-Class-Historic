@@ -152,7 +152,9 @@ a resultset with no ordering applied use L</_siblings>
 =cut
 sub siblings {
     my $self = shift;
-    return $self->_siblings->search ({}, { order_by => $self->position_column } );
+    return $self->_siblings->search ({}, {
+      order_by => [ $self->position_column, $self->grouping_column ],
+    });
 }
 
 =head2 previous_siblings
@@ -205,10 +207,15 @@ if the current object is the first one.
 sub previous_sibling {
     my $self = shift;
     my $position_column = $self->position_column;
+    my $grouping_column = $self->grouping_column;
 
     my $psib = $self->previous_siblings->search(
         {},
-        { rows => 1, order_by => { '-desc' => $position_column } },
+        { rows => 1, order_by => [
+          { '-desc' => $position_column },
+          $grouping_column,
+        ],
+        },
     )->single;
 
     return defined $psib ? $psib : 0;
@@ -226,10 +233,15 @@ is this sibling.
 sub first_sibling {
     my $self = shift;
     my $position_column = $self->position_column;
+    my $grouping_column = $self->grouping_column;
 
     my $fsib = $self->previous_siblings->search(
         {},
-        { rows => 1, order_by => { '-asc' => $position_column } },
+        { rows => 1, order_by => [
+          { '-asc' => $position_column },
+          $grouping_column,
+        ],
+        },
     )->single;
 
     return defined $fsib ? $fsib : 0;
@@ -247,9 +259,14 @@ if the current object is the last one.
 sub next_sibling {
     my $self = shift;
     my $position_column = $self->position_column;
+    my $grouping_column = $self->grouping_column;
     my $nsib = $self->next_siblings->search(
         {},
-        { rows => 1, order_by => { '-asc' => $position_column } },
+        { rows => 1, order_by => [
+          { '-asc' => $position_column },
+          $grouping_column,
+        ],
+        },
     )->single;
 
     return defined $nsib ? $nsib : 0;
@@ -267,9 +284,14 @@ sibling.
 sub last_sibling {
     my $self = shift;
     my $position_column = $self->position_column;
+    my $grouping_column = $self->grouping_column;
     my $lsib = $self->next_siblings->search(
         {},
-        { rows => 1, order_by => { '-desc' => $position_column } },
+        { rows => 1, order_by => [
+          { '-desc' => $position_column },
+          $grouping_column,
+        ],
+        },
     )->single;
 
     return defined $lsib ? $lsib : 0;
@@ -279,10 +301,14 @@ sub last_sibling {
 sub _last_sibling_posval {
     my $self = shift;
     my $position_column = $self->position_column;
+    my $grouping_column = $self->grouping_column;
 
     my $cursor = $self->next_siblings->search(
         {},
-        { rows => 1, order_by => { '-desc' => $position_column }, select => $position_column },
+        { rows => 1, order_by => [
+          { '-desc' => $position_column },
+          $grouping_column
+        ], select => $position_column },
     )->cursor;
 
     my ($pos) = $cursor->next;
