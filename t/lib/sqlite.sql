@@ -303,6 +303,16 @@ CREATE UNIQUE INDEX track_cd_position ON track (cd, position);
 CREATE UNIQUE INDEX track_cd_title ON track (cd, title);
 
 --
+-- Table: track_updates
+--
+CREATE TABLE track_updates (
+  cdid INTEGER PRIMARY KEY NOT NULL,
+  last_updated_on datetime
+);
+
+CREATE INDEX track_updates_luo ON track_updates (last_updated_on);
+
+--
 -- Table: cd
 --
 CREATE TABLE cd (

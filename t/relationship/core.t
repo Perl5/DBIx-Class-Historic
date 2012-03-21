@@ -324,4 +324,49 @@ is($cds->count, 1, "subjoins under left joins force_left (arrayref)");
 $cds = $schema->resultset("CD")->search({ 'me.cdid' => 5 }, { join => { single_track => { cd => {} } } });
 is($cds->count, 1, "subjoins under left joins force_left (hashref)");
 
+# check that forced left joins can be broken with an explicit join_type
+$cds = $schema->resultset("CD")->search({ 'me.cdid' => 5 }, { join => { single_track => [ qw/is_current cd/ ] } });
+is_same_sql(
+  ${$cds->as_query}->[0],  # arrayrefref
+  '(
+     SELECT
+       me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track
+     FROM
+       cd me
+       LEFT JOIN track single_track ON
+         single_track.trackid = me.single_track
+       INNER JOIN track_updates is_current ON (
+         (
+           is_current.cdid = single_track.cd
+           AND is_current.last_updated_on <= single_track.last_updated_on
+         )
+         OR single_track.cd IS NULL
+       )
+     WHERE ( me.cdid = ? )
+  )',
+  'subjoins under left joins force_left with explicit join_type'
+);
+
+$cds = $schema->resultset("CD")->search({ 'me.cdid' => 5 }, { join => { single_track => { is_current => { cd => { tracks => 'is_current' } } } } });
+is_same_sql(
+  ${$cds->as_query}->[0],
+  '(
+         SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track
+           FROM cd me
+      LEFT JOIN track single_track ON single_track.trackid = me.single_track
+     INNER JOIN track_updates is_current ON (
+         (   is_current.cdid = single_track.cd AND   is_current.last_updated_on <= single_track.last_updated_on )
+         OR single_track.cd IS NULL
+       )
+      LEFT JOIN cd cd ON cd.cdid = is_current.cdid
+      LEFT JOIN track tracks ON tracks.cd = cd.cdid
+     INNER JOIN track_updates is_current_2 ON (
+         ( is_current_2.cdid =       tracks.cd AND is_current_2.last_updated_on <=       tracks.last_updated_on )
+         OR       tracks.cd IS NULL
+       )
+     WHERE ( me.cdid = ? )
+  )',
+  'subjoins under left joins force_left with explicit join_type (convoluted)'
+);
+
 done_testing;

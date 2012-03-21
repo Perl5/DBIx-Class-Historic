@@ -69,6 +69,23 @@ __PACKAGE__->belongs_to(
     { join_type => 'left' },
 );
 
+# Showcasing a forced INNER JOIN
+__PACKAGE__->has_one( is_current => 'DBICTest::Schema::TrackUpdate',
+   sub {
+      my $args = shift;
+      my ($foreign, $self) = @$args{qw(foreign_alias self_alias)};
+
+      return {-or => [
+         {-and => [
+            { "$foreign.cdid"            => { -ident => "$self.cd" } },
+            { "$foreign.last_updated_on" => { '<=' => \"$self.last_updated_on" } },
+         ]},
+         # in the case of a LEFT JOIN on $self, do not invalidate the rest of the match
+         { "$self.cd" => undef },
+      ] };
+   }, { join_type => 'INNER' }
+);
+
 __PACKAGE__->has_many (
   next_tracks => __PACKAGE__,
   sub {

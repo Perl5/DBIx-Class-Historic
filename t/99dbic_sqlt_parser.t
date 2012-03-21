@@ -53,6 +53,7 @@ my $idx_exceptions = {
     'Artwork'       => -1,
     'ForceForeign'  => -1,
     'LinerNotes'    => -1,
+    'TrackUpdate'   => -1,
     'TwoKeys'       => -1, # TwoKeys has the index turned off on the rel def
 };
 

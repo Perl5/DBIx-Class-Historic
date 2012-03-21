@@ -1589,10 +1589,8 @@ sub _resolve_join {
     my $rel_src = $self->related_source($join);
     return [ { $as => $rel_src->from,
                -rsrc => $rel_src,
-               -join_type => $parent_force_left
-                  ? 'left'
-                  : $rel_info->{attrs}{join_type}
-                ,
+               # allow for an explicit join_type to override whatever force_left property is applied
+               -join_type => $rel_info->{attrs}{join_type} || ($parent_force_left && 'left'),
                -join_path => [@$jpath, { $join => $as } ],
                -is_single => (
                   $rel_info->{attrs}{accessor}

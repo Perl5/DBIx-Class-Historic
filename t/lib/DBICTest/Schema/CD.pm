@@ -32,7 +32,7 @@ __PACKAGE__->add_columns(
     data_type => 'integer',
     is_nullable => 1,
     is_foreign_key => 1,
-  }
+  },
 );
 __PACKAGE__->set_primary_key('cdid');
 __PACKAGE__->add_unique_constraint([ qw/artist title/ ]);
@@ -58,6 +58,8 @@ __PACKAGE__->has_many(
 __PACKAGE__->has_many(
     cd_to_producer => 'DBICTest::Schema::CD_to_Producer' => 'cd'
 );
+
+__PACKAGE__->has_one(track_update => 'DBICTest::Schema::TrackUpdate', 'cdid');
 
 __PACKAGE__->might_have(
     liner_notes => 'DBICTest::Schema::LinerNotes', undef,

@@ -27,6 +27,7 @@ __PACKAGE__->load_classes(qw/
   Link
   #dummy
   Track
+  TrackUpdate
   Tag
   Year2000CDs
   Year1999CDs
