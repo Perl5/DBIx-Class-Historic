@@ -44,7 +44,7 @@ use mro 'c3';
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
-use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE);
+use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN);
 use namespace::clean;
 use Moo;
 
@@ -273,49 +273,38 @@ sub _group_by_to_dq {
   };
 }
 
-sub _table_to_dq {
-# optimized due to hotttnesss
-#  my ($self, $from) = @_;
-  if (my $ref = ref $_[1] ) {
+around _table_to_dq => sub {
+  my ($orig, $self) = (shift, shift);
+  my ($spec) = @_;
+  if (my $ref = ref $spec ) {
     if ($ref eq 'ARRAY') {
-      return $_[0]->_literal_to_dq($_[0]->_recurse_from(@{$_[1]}));
+      return $self->_join_to_dq(@$spec);
     }
     elsif ($ref eq 'HASH') {
-      return $_[0]->_literal_to_dq($_[0]->_recurse_from($_[1]));
-    }
-    elsif ($ref eq 'REF' && ref ${$_[1]} eq 'ARRAY') {
-      my ($sql, @bind) = @{ ${$_[1]} };
-      push @{$_[0]->{from_bind}}, @bind;
-      return $sql
+      my ($as, $table, $toomuch) = ( map
+        { $_ => $spec->{$_} }
+        ( grep { $_ !~ /^\-/ } keys %$spec )
+      );
+      $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$toomuch' key present" )
+        if defined $toomuch;
+
+      return +{
+        type => DQ_ALIAS,
+        alias => $self->_table_to_dq($table),
+        as => $as,
+      };
     }
   }
-  return $_[0]->next::method ($_[1]);
-}
+  return $self->$orig(@_);
+};
 
-sub _generate_join_clause {
-    my ($self, $join_type) = @_;
-
-    $join_type = $self->{_default_jointype}
-      if ! defined $join_type;
-
-    return sprintf ('%s JOIN ',
-      $join_type ?  $self->_sqlcase($join_type) : ''
-    );
-}
-
-sub _recurse_from {
-  my $self = shift;
-
-  return join (' ', $self->_gen_from_blocks(@_) );
-}
-
-sub _gen_from_blocks {
+sub _join_to_dq {
   my ($self, $from, @joins) = @_;
 
-  my @fchunks = $self->_from_chunk_to_sql($from);
+  my $cur_dq = $self->_table_to_dq($from);
 
-  for (@joins) {
-    my ($to, $on) = @$_;
+  foreach my $join (@joins) {
+    my ($to, $on) = @$join;
 
     # check whether a join type exists
     my $to_jt = ref($to) eq 'ARRAY' ? $to->[0] : $to;
@@ -325,57 +314,22 @@ sub _gen_from_blocks {
       $join_type =~ s/^\s+ | \s+$//xg;
     }
 
-    my @j = $self->_generate_join_clause( $join_type );
+    $join_type ||= $self->{_default_jointype};
 
-    if (ref $to eq 'ARRAY') {
-      push(@j, '(', $self->_recurse_from(@$to), ')');
-    }
-    else {
-      push(@j, $self->_from_chunk_to_sql($to));
-    }
-
-    my ($sql, @bind) = $self->_join_condition($on);
-    push(@j, ' ON ', $sql);
-    push @{$self->{from_bind}}, @bind;
-
-    push @fchunks, join '', @j;
+    $cur_dq = +{
+      type => DQ_JOIN,
+      ($join_type ? (outer => $join_type) : ()),
+      join => [ $cur_dq, $self->_table_to_dq($to) ],
+      ($on
+        ? (on => $self->_expr_to_dq($self->_expand_join_condition($on)))
+        : ()),
+    };
   }
 
-  return @fchunks;
+  return $cur_dq;
 }
 
-sub _from_chunk_to_sql {
-  my ($self, $fromspec) = @_;
-
-  return join (' ', do {
-    if (! ref $fromspec) {
-      $self->_render_sqla(ident => $fromspec);
-    }
-    elsif (ref $fromspec eq 'SCALAR') {
-      $$fromspec;
-    }
-    elsif (ref $fromspec eq 'REF' and ref $$fromspec eq 'ARRAY') {
-      push @{$self->{from_bind}}, @{$$fromspec}[1..$#$$fromspec];
-      $$fromspec->[0];
-    }
-    elsif (ref $fromspec eq 'HASH') {
-      my ($as, $table, $toomuch) = ( map
-        { $_ => $fromspec->{$_} }
-        ( grep { $_ !~ /^\-/ } keys %$fromspec )
-      );
-
-      $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$toomuch' key present" )
-        if defined $toomuch;
-
-      ($self->_from_chunk_to_sql($table), $self->_render_sqla(ident => $as) );
-    }
-    else {
-      $self->throw_exception('Unsupported from refkind: ' . ref $fromspec );
-    }
-  });
-}
-
-sub _join_condition {
+sub _expand_join_condition {
   my ($self, $cond) = @_;
 
   # Backcompat for the old days when a plain hashref
@@ -391,21 +345,13 @@ sub _join_condition {
       and
     ! ref ( (values %$cond)[0] )
   ) {
-    $cond = { keys %$cond => { -ident => values %$cond } }
+    return +{ keys %$cond => { -ident => values %$cond } }
   }
   elsif ( ref $cond eq 'ARRAY' ) {
-    # do our own ORing so that the hashref-shim above is invoked
-    my @parts;
-    my @binds;
-    foreach my $c (@$cond) {
-      my ($sql, @bind) = $self->_join_condition($c);
-      push @binds, @bind;
-      push @parts, $sql;
-    }
-    return join(' OR ', @parts), @binds;
+    return [ map $self->_expand_join_condition($_), @$cond ];
   }
 
-  return $self->_recurse_where($cond);
+  return $cond;
 }
 
 1;

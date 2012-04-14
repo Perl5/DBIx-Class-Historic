@@ -58,8 +58,8 @@ is_same_sql_bind(
   q/
     SELECT `me`.`cdid`, COUNT( `tracks`.`cd` ), MIN( `me`.`year` ) AS `minyear`
       FROM `cd` `me`
-      JOIN `artist` `artist` ON ( `artist`.`artistid` = `me`.`artist` )
-      LEFT JOIN `tracks` `tracks` ON ( `tracks`.`cd` = `me`.`cdid` )
+      JOIN `artist` ON ( `artist`.`artistid` = `me`.`artist` )
+      LEFT JOIN `tracks` ON ( `tracks`.`cd` = `me`.`cdid` )
     WHERE ( `artist`.`name` = ? AND `me`.`year` = ? )
   /,
   [ ['artist.name' => 'Caterwauler McCrae'], ['me.year' => 2001] ],
@@ -335,7 +335,7 @@ $sql_maker->quote_char([qw/[ ]/]);
 
 is_same_sql_bind(
   $sql, \@bind,
-  q/SELECT MAX ( [rank] ) AS [max_rank], [rank], COUNT( * ) AS [cnt] FROM [cd] [me]  JOIN [artist] [artist] ON ( [artist].[artistid] = [me].[artist] ) WHERE ( [artist].[name] = ? AND [me].[year] = ? )/, [ ['artist.name' => 'Caterwauler McCrae'], ['me.year' => 2001] ],
+  q/SELECT MAX ( [rank] ) AS [max_rank], [rank], COUNT( * ) AS [cnt] FROM [cd] [me]  JOIN [artist] ON ( [artist].[artistid] = [me].[artist] ) WHERE ( [artist].[name] = ? AND [me].[year] = ? )/, [ ['artist.name' => 'Caterwauler McCrae'], ['me.year' => 2001] ],
   'got correct SQL and bind parameters for count query with bracket quoting'
 );
 
