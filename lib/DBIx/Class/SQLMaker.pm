@@ -36,9 +36,8 @@ Currently the enhancements to L<SQL::Abstract> are:
 =cut
 
 use base qw/
-  DBIx::Class::SQLMaker::LimitDialects
   SQL::Abstract
-  DBIx::Class
+  DBIx::Class::SQLMaker::LimitDialects
 /;
 use mro 'c3';
 
@@ -46,8 +45,9 @@ use Sub::Name 'subname';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
 use namespace::clean;
+use Moo;
 
-__PACKAGE__->mk_group_accessors (simple => qw/quote_char name_sep limit_dialect/);
+has limit_dialect => (is => 'rw', trigger => sub { shift->clear_renderer });
 
 # for when I need a normalized l/r pair
 sub _quote_chars {
@@ -101,63 +101,6 @@ sub _quote {
   );
 }
 
-sub new {
-  my $self = shift->next::method(@_);
-
-  # use the same coderefs, they are prepared to handle both cases
-  my @extra_dbic_syntax = (
-    { regex => qr/^ ident $/xi, handler => '_where_op_IDENT' },
-    { regex => qr/^ value $/xi, handler => '_where_op_VALUE' },
-  );
-
-  push @{$self->{special_ops}}, @extra_dbic_syntax;
-  push @{$self->{unary_ops}}, @extra_dbic_syntax;
-
-  $self;
-}
-
-sub _where_op_IDENT {
-  my $self = shift;
-  my ($op, $rhs) = splice @_, -2;
-  if (ref $rhs) {
-    $self->throw_exception("-$op takes a single scalar argument (a quotable identifier)");
-  }
-
-  # in case we are called as a top level special op (no '=')
-  my $lhs = shift;
-
-  $_ = $self->_convert($self->_quote($_)) for ($lhs, $rhs);
-
-  return $lhs
-    ? "$lhs = $rhs"
-    : $rhs
-  ;
-}
-
-sub _where_op_VALUE {
-  my $self = shift;
-  my ($op, $rhs) = splice @_, -2;
-
-  # in case we are called as a top level special op (no '=')
-  my $lhs = shift;
-
-  my @bind = [
-    ($lhs || $self->{_nested_func_lhs} || $self->throw_exception("Unable to find bindtype for -value $rhs") ),
-    $rhs
-  ];
-
-  return $lhs
-    ? (
-      $self->_convert($self->_quote($lhs)) . ' = ' . $self->_convert('?'),
-      @bind
-    )
-    : (
-      $self->_convert('?'),
-      @bind,
-    )
-  ;
-}
-
 sub _where_op_NEST {
   carp_unique ("-nest in search conditions is deprecated, you most probably wanted:\n"
       .q|{..., -and => [ \%cond0, \@cond1, \'cond2', \[ 'cond3', [ col => bind ] ], etc. ], ... }|
@@ -192,7 +135,7 @@ sub select {
   if ($limit) {
     # this is legacy code-flow from SQLA::Limit, it is not set in stone
 
-    ($sql, @bind) = $self->next::method ($table, $fields, $where);
+    ($sql, @bind) = $self->next::method ($table, \$fields, $where);
 
     my $limiter =
       $self->can ('emulate_limit')  # also backcompat hook from SQLA::Limit
@@ -213,7 +156,7 @@ sub select {
     );
   }
   else {
-    ($sql, @bind) = $self->next::method ($table, $fields, $where, $rs_attrs);
+    ($sql, @bind) = $self->next::method ($table, \$fields, $where, $rs_attrs->{order_by}, $rs_attrs);
   }
 
   push @{$self->{where_bind}}, @bind;
@@ -367,15 +310,15 @@ sub _order_by {
   }
 }
 
-sub _table {
+sub _table_to_dq {
 # optimized due to hotttnesss
 #  my ($self, $from) = @_;
   if (my $ref = ref $_[1] ) {
     if ($ref eq 'ARRAY') {
-      return $_[0]->_recurse_from(@{$_[1]});
+      return $_[0]->_literal_to_dq($_[0]->_recurse_from(@{$_[1]}));
     }
     elsif ($ref eq 'HASH') {
-      return $_[0]->_recurse_from($_[1]);
+      return $_[0]->_literal_to_dq($_[0]->_recurse_from($_[1]));
     }
     elsif ($ref eq 'REF' && ref ${$_[1]} eq 'ARRAY') {
       my ($sql, @bind) = @{ ${$_[1]} };
@@ -443,7 +386,7 @@ sub _from_chunk_to_sql {
 
   return join (' ', do {
     if (! ref $fromspec) {
-      $self->_quote($fromspec);
+      $self->_render_sqla(ident => $fromspec);
     }
     elsif (ref $fromspec eq 'SCALAR') {
       $$fromspec;
@@ -461,7 +404,7 @@ sub _from_chunk_to_sql {
       $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$toomuch' key present" )
         if defined $toomuch;
 
-      ($self->_from_chunk_to_sql($table), $self->_quote($as) );
+      ($self->_from_chunk_to_sql($table), $self->_render_sqla(ident => $as) );
     }
     else {
       $self->throw_exception('Unsupported from refkind: ' . ref $fromspec );
