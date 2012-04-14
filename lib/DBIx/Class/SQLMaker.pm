@@ -44,6 +44,7 @@ use mro 'c3';
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
+use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE);
 use namespace::clean;
 use Moo;
 
@@ -113,9 +114,6 @@ sub _where_op_NEST {
 sub select {
   my ($self, $table, $fields, $where, $rs_attrs, $limit, $offset) = @_;
 
-
-  $fields = $self->_recurse_fields($fields);
-
   if (defined $offset) {
     $self->throw_exception('A supplied offset must be a non-negative integer')
       if ( $offset =~ /\D/ or $offset < 0 );
@@ -135,7 +133,7 @@ sub select {
   if ($limit) {
     # this is legacy code-flow from SQLA::Limit, it is not set in stone
 
-    ($sql, @bind) = $self->next::method ($table, \$fields, $where);
+    ($sql, @bind) = $self->next::method ($table, $fields, $where);
 
     my $limiter =
       $self->can ('emulate_limit')  # also backcompat hook from SQLA::Limit
@@ -156,7 +154,7 @@ sub select {
     );
   }
   else {
-    ($sql, @bind) = $self->next::method ($table, \$fields, $where, $rs_attrs->{order_by}, $rs_attrs);
+    ($sql, @bind) = $self->next::method ($table, $fields, $where, $rs_attrs->{order_by}, $rs_attrs);
   }
 
   push @{$self->{where_bind}}, @bind;
@@ -209,6 +207,70 @@ sub insert {
   }
 
   next::method(@_);
+}
+
+around _select_field_to_dq => sub {
+  my ($orig, $self) = (shift, shift);
+  my ($field) = @_;
+  my $ref = ref $field;
+  if ($ref eq 'HASH') {
+    my %hash = %$field;  # shallow copy
+
+    my $as = delete $hash{-as};   # if supplied
+
+    my ($func, $args, @toomany) = %hash;
+
+    # there should be only one pair
+    if (@toomany) {
+      $self->throw_exception( "Malformed select argument - too many keys in hash: " . join (',', keys %$field ) );
+    }
+
+    if (lc ($func) eq 'distinct' && ref $args eq 'ARRAY' && @$args > 1) {
+      $self->throw_exception (
+        'The select => { distinct => ... } syntax is not supported for multiple columns.'
+       .' Instead please use { group_by => [ qw/' . (join ' ', @$args) . '/ ] }'
+       .' or { select => [ qw/' . (join ' ', @$args) . '/ ], distinct => 1 }'
+      );
+    }
+
+    my $field_dq = $self->_op_to_dq(
+      apply => $self->_ident_to_dq(uc($func)),
+      $self->_select_field_list_to_dq($args),
+    );
+
+    return $field_dq unless $as;
+
+    return +{
+      type => DQ_ALIAS,
+      alias => $field_dq,
+      as => $as
+    };
+  } else {
+    return $self->$orig(@_);
+  }
+};
+
+around _source_to_dq => sub {
+  my ($orig, $self) = (shift, shift);
+  my $attrs = $_[4]; # table, fields, where, order, attrs
+  my $start_dq = $self->$orig(@_);
+  return $start_dq unless $attrs->{group_by};
+  my $grouped_dq = $self->_group_by_to_dq($attrs->{group_by}, $start_dq);
+  return $grouped_dq unless $attrs->{having};
+  +{
+    type => DQ_WHERE,
+    from => $grouped_dq,
+    where => $self->_where_to_dq($attrs->{having})
+  };
+};
+
+sub _group_by_to_dq {
+  my ($self, $group, $from) = @_;
+  +{
+    type => DQ_GROUP,
+    by => [ $self->_select_field_list_to_dq($group) ],
+    from => $from,
+  };
 }
 
 sub _recurse_fields {
