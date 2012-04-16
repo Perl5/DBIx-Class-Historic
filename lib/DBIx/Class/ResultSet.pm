@@ -1893,7 +1893,7 @@ sub _rs_update_delete {
   # make a new $rs selecting only the PKs (that's all we really need for the subq)
   delete @{$attrs}{qw/collapse select _prefetch_selector_range as/};
   $attrs->{columns} = [ map { "$attrs->{alias}.$_" } @$idcols ];
-  $attrs->{group_by} = [];  # FIXME - this is an evil hack, it causes the optimiser to kick in and throw away the LEFT joins
+  #$attrs->{group_by} = [];  # FIXME - this is an evil hack, it causes the optimiser to kick in and throw away the LEFT joins
   my $subrs = (ref $self)->new($rsrc, $attrs);
 
   if (@$idcols == 1) {
