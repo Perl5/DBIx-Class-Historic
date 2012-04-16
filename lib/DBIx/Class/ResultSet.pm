@@ -1446,10 +1446,15 @@ sub _construct_objects {
   else {
     $attrs->{_ordered_for_collapse} ||= (!$attrs->{order_by}) ? undef : do {
       my $st = $rsrc->schema->storage;
-      my @ord_cols = map
-        { $_->[0] }
-        ( $st->_extract_order_criteria($attrs->{order_by}) )
-      ;
+      my $conv = $self->_sqla_converter;
+      my @order_by_dq = $self->_extract_by_from_order_by(
+        $conv->_order_by_to_dq($attrs->{order_by})
+      );
+      my @ord_cols = map {
+        $_->{type} eq DQ_IDENTIFIER
+          ? join(',',@{$_->{elements}})
+          : '__TOTALLY_BOGUS_DUDE__'
+      } @order_by_dq;
 
       my $colinfos = $st->_resolve_column_info($attrs->{from}, \@ord_cols);
 
