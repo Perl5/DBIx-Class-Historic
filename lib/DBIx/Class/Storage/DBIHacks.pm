@@ -299,7 +299,10 @@ sub _resolve_aliastypes_from_select_args {
   foreach my $alias (reverse @alias_dq) {
     $alias_list->{$alias->{to}} = $alias;
     my $join_path = $alias->{'dbix-class.join_path'}||[];
-    unless ($alias->{is_single} and !grep { $multiplying->{$_} } @$join_path) {
+    unless (
+      $alias->{'dbix-class.is_single'}
+      and !grep { $multiplying->{$_} } @$join_path
+    ) {
       $multiplying->{$alias->{to}} = $join_path;
     }
     unless ($join_dq{$alias}{outer}) {
