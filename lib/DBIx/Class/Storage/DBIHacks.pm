@@ -287,9 +287,11 @@ sub _resolve_aliastypes_from_select_args {
       unless $from_dq->{right}{type} eq DQ_ALIAS;
     push @alias_dq, $from_dq->{right};
     $join_dq{$from_dq->{right}} = $from_dq;
-    my @columns = $schema->source($from_dq->{right}{'dbix-class.source_name'})
-                         ->columns;
-    @col_map{@columns} = ($from_dq->{right}{to}) x @columns;
+    if (my $source_name = $from_dq->{right}{'dbix-class.source_name'}) {
+      my @columns = $schema->source($source_name)
+                           ->columns;
+      @col_map{@columns} = ($from_dq->{right}{to}) x @columns;
+    }
     $from_dq = $from_dq->{left};
   }
   die "Don't understand this from"
