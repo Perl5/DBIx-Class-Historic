@@ -393,8 +393,12 @@ sub _group_over_selection {
   }
   my $select_list = $conv->_select_field_list_to_dq($select);
   my (@group_by, %group_seen);
+  my %select_aliases;
   foreach my $entry (@$select_list) {
-    $entry = $entry->{alias} if $entry->{type} eq DQ_ALIAS;
+    if ($entry->{type} eq DQ_ALIAS) {
+      $select_aliases{$entry->{to}} = 1;
+      $entry = $entry->{from}
+    }
     if ($entry->{type} eq DQ_IDENTIFIER) {
       push @group_by, \$entry;
       $group_seen{join('.',@{$entry->{elements}})} = 1;
@@ -413,9 +417,11 @@ sub _group_over_selection {
     while ($order_dq) {
       if ($order_dq->{by}{type} eq DQ_IDENTIFIER) {
         my @el = @{$order_dq->{by}{elements}};
-        unshift @el, $col_map{$el[0]} if @el == 1 and $col_map{$el[0]};
-        push @group_by, \$order_dq->{by}
-          unless $group_seen{join('.',@el)};
+        unless(@el == 1 and $select_aliases{$el[0]}) {
+          unshift @el, $col_map{$el[0]} if @el == 1 and $col_map{$el[0]};
+          push @group_by, \$order_dq->{by}
+            unless $group_seen{join('.',@el)};
+        }
       }
       $order_dq = $order_dq->{from};
     }
