@@ -43,11 +43,11 @@ around _select_field_to_dq => sub {
 
     # there should be only one pair
     if (@toomany) {
-      $self->throw_exception( "Malformed select argument - too many keys in hash: " . join (',', keys %$field ) );
+      die( "Malformed select argument - too many keys in hash: " . join (',', keys %$field ) );
     }
 
     if (lc ($func) eq 'distinct' && ref $args eq 'ARRAY' && @$args > 1) {
-      $self->throw_exception (
+      die(
         'The select => { distinct => ... } syntax is not supported for multiple columns.'
        .' Instead please use { group_by => [ qw/' . (join ' ', @$args) . '/ ] }'
        .' or { select => [ qw/' . (join ' ', @$args) . '/ ], distinct => 1 }'
