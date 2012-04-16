@@ -314,7 +314,7 @@ sub _resolve_aliastypes_from_select_args {
 
   my %to_scan = (
     restricting => [
-      $conv->_where_to_dq($where),
+      ($where ? $conv->_where_to_dq($where) : ()),
       ($attrs->{group_by} ? $conv->_group_by_to_dq($attrs->{group_by}) : ()),
       ($attrs->{having} ? $conv->_where_to_dq($attrs->{having}) : ()),
     ],
@@ -329,15 +329,28 @@ sub _resolve_aliastypes_from_select_args {
   );
   foreach my $type (keys %to_scan) {
     my $this_type = $aliases_by_type->{$type};
-    $self->_scan_identifiers(
-      sub {
-        my ($node) = @_;
-        my ($col, $alias) = reverse @{$node->{elements}};
-        $alias ||= $col_map{$col};
-        if ($alias) {
-          $this_type->{$alias} ||=
-            $alias_list->{$alias}{'dbix-class.join_path'} || []
-        }
+    $self->_scan_nodes(
+      {
+        DQ_IDENTIFIER ,=> sub {
+          my ($node) = @_;
+          my ($col, $alias) = reverse @{$node->{elements}};
+          $alias ||= $col_map{$col};
+          if ($alias) {
+            $this_type->{$alias} ||=
+              $alias_list->{$alias}{'dbix-class.join_path'} || []
+          }
+        },
+        DQ_LITERAL ,=> sub {
+          my ($node) = @_;
+          if (my $sql = $_[0]->{literal}) {
+            while ($sql =~ /(\w+)\.(\w+)/g) {
+              if (my $alias_dq = $alias_list->{my $alias = $1}) {
+                $this_type->{$alias} ||=
+                  $alias_dq->{'dbix-class.join_path'} || []
+              }
+            }
+          }
+        },
       },
       @{$to_scan{$type}}
     );
@@ -357,15 +370,19 @@ sub _extract_by_from_order_by {
 
 sub _scan_identifiers {
   my ($self, $cb, @queue) = @_;
+  $self->_scan_nodes({ DQ_IDENTIFIER ,=> $cb }, @queue);
+}
+
+sub _scan_nodes {
+  my ($self, $cb_map, @queue) = @_;
   while (my $node = shift @queue) {
-    if ($node->{type} and $node->{type} eq DQ_IDENTIFIER) {
+    if ($node->{type} and my $cb = $cb_map->{$node->{type}}) {
       $cb->($node);
-    } else {
-      push @queue,
-        grep ref($_) eq 'HASH',
-          map +(ref($_) eq 'ARRAY' ? @$_ : $_),
-            @{$node}{grep !/\./, keys %$node};
     }
+    push @queue,
+      grep ref($_) eq 'HASH',
+        map +(ref($_) eq 'ARRAY' ? @$_ : $_),
+          @{$node}{grep !/\./, keys %$node};
   }
 }
 

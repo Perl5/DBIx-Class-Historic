@@ -326,6 +326,11 @@ sub _extract_by_from_order_by {
        ->_extract_by_from_order_by(@_)
 }
 
+sub _scan_nodes {
+  shift->result_source->schema->storage
+       ->_scan_nodes(@_)
+}
+
 sub _scan_identifiers {
   shift->result_source->schema->storage
        ->_scan_identifiers(@_)
@@ -1653,8 +1658,19 @@ sub _count_subq_rs {
     my @parts = @$g;
     if ($attrs->{having}) {
       my $having_dq = $self->_sqla_converter->_where_to_dq($attrs->{having});
-      $self->_scan_identifiers(
-        sub { push @parts, join('.', @{$_[0]->{elements}}) },
+      $self->_scan_nodes(
+        {
+          DQ_IDENTIFIER ,=>
+            sub { push @parts, join('.', @{$_[0]->{elements}}) },
+          DQ_LITERAL ,=>
+            sub {
+              if (my $sql = $_[0]->{literal}) {
+                while ($sql =~ /[\s,]\w+\.(\w+)[\s,]/g) {
+                  push @parts, $1;
+                }
+              }
+            },
+        },
         $having_dq
       );
 
