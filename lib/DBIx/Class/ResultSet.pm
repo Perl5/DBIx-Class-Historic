@@ -326,6 +326,20 @@ sub _extract_by_from_order_by {
   return @by;
 }
 
+sub _scan_identifiers {
+  my ($self, $cb, @queue) = @_;
+  while (my $node = shift @queue) {
+    if ($node->{type} and $node->{type} eq DQ_IDENTIFIER) {
+      $cb->($node);
+    } else {
+      push @queue,
+        grep ref($_) eq 'HASH',
+          map +(ref($_) eq 'ARRAY' ? @$_ : $_),
+            @{$node}{grep !/\./, keys %$node};
+    }
+  }
+}
+
 sub _resolve_aliastypes_from_select_args {
   my ($self, $from, $select, $where, $attrs) = @_; # ICK
 
@@ -392,20 +406,16 @@ sub _resolve_aliastypes_from_select_args {
   );
   foreach my $type (keys %to_scan) {
     my $this_type = $aliases_by_type->{$type};
-    my @queue = @{$to_scan{$type}};
-    while (my $node = shift @queue) {
-      if ($node->{type} eq DQ_IDENTIFIER) {
+    $self->_scan_identifiers(
+      sub {
+        my ($node) = @_;
         my ($col, $alias) = reverse @{$node->{elements}};
         $alias ||= $col_map{$col};
         $this_type->{$alias} ||= $alias_list->{$alias}{'dbix-class.join_path'}
           if $alias;
-      } else {
-        push @queue,
-          grep ref($_) eq 'HASH',
-            map +(ref($_) eq 'ARRAY' ? @$_ : $_),
-              @{$node}{grep !/./, keys %$node};
-      }
-    }
+      },
+      @{$to_scan{$type}}
+    );
   }
   return $aliases_by_type;
 }
@@ -1929,13 +1939,23 @@ sub _rs_update_delete {
   ) {
     # Most databases do not allow aliasing of tables in UPDATE/DELETE. Thus
     # a condition containing 'me' or other table prefixes will not work
-    # at all. Tell SQLMaker to dequalify idents via a gross hack.
-    my $sqla = $rsrc->storage->sql_maker;
-    local $sqla->{_dequalify_idents} = 1;
+    # at all. This code dequalifies all identifiers by reducing them to
+    # their last component.
+
+    my $send_cond;
+
+    if ($self->{cond}) {
+      $self->_scan_identifiers(
+        sub { $_->{elements} = [ $_->{elements}[-1] ] for @_ },
+        my $where_dq = $self->_sqla_converter->_where_to_dq($self->{cond})
+      );
+      $send_cond = \$where_dq;
+    }
+
     return $rsrc->storage->$op(
       $rsrc,
       $op eq 'update' ? $values : (),
-      $self->{cond},
+      $send_cond,
     );
   }
 
