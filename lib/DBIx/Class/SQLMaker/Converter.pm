@@ -106,7 +106,7 @@ around _table_to_dq => sub {
         { $_ => $spec->{$_} }
         ( grep { $_ !~ /^\-/ } keys %$spec )
       );
-      $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$toomuch' key present" )
+      die "Only one table/as pair expected in from-spec but an exra '$toomuch' key present"
         if defined $toomuch;
 
       return +{
