@@ -132,6 +132,10 @@ sub _join_to_dq {
 
   my $cur_dq = $self->_table_to_dq($from);
 
+  if (!@joins or @joins == 1 and ref($joins[0]) eq 'HASH') {
+    return $cur_dq;
+  }
+
   foreach my $join (@joins) {
     my ($to, $on) = @$join;
 
