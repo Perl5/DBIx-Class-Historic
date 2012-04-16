@@ -44,7 +44,6 @@ use mro 'c3';
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
-use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN);
 use namespace::clean;
 use Moo;
 
@@ -57,6 +56,8 @@ sub _quote_chars {
     ( ref $_[0]->{quote_char} ? (@{$_[0]->{quote_char}}) : ( ($_[0]->{quote_char}) x 2 ) )
   ;
 }
+
+sub converter_class { 'DBIx::Class::SQLMaker::Converter' }
 
 # FIXME when we bring in the storage weaklink, check its schema
 # weaklink and channel through $schema->throw_exception
@@ -207,151 +208,6 @@ sub insert {
   }
 
   next::method(@_);
-}
-
-around _select_field_to_dq => sub {
-  my ($orig, $self) = (shift, shift);
-  my ($field) = @_;
-  my $ref = ref $field;
-  if ($ref eq 'HASH') {
-    my %hash = %$field;  # shallow copy
-
-    my $as = delete $hash{-as};   # if supplied
-
-    my ($func, $args, @toomany) = %hash;
-
-    # there should be only one pair
-    if (@toomany) {
-      $self->throw_exception( "Malformed select argument - too many keys in hash: " . join (',', keys %$field ) );
-    }
-
-    if (lc ($func) eq 'distinct' && ref $args eq 'ARRAY' && @$args > 1) {
-      $self->throw_exception (
-        'The select => { distinct => ... } syntax is not supported for multiple columns.'
-       .' Instead please use { group_by => [ qw/' . (join ' ', @$args) . '/ ] }'
-       .' or { select => [ qw/' . (join ' ', @$args) . '/ ], distinct => 1 }'
-      );
-    }
-
-    my $field_dq = $self->_op_to_dq(
-      apply => $self->_ident_to_dq(uc($func)),
-      $self->_select_field_list_to_dq($args),
-    );
-
-    return $field_dq unless $as;
-
-    return +{
-      type => DQ_ALIAS,
-      alias => $field_dq,
-      as => $as
-    };
-  } else {
-    return $self->$orig(@_);
-  }
-};
-
-around _source_to_dq => sub {
-  my ($orig, $self) = (shift, shift);
-  my $attrs = $_[4]; # table, fields, where, order, attrs
-  my $start_dq = $self->$orig(@_);
-  return $start_dq unless $attrs->{group_by};
-  my $grouped_dq = $self->_group_by_to_dq($attrs->{group_by}, $start_dq);
-  return $grouped_dq unless $attrs->{having};
-  +{
-    type => DQ_WHERE,
-    from => $grouped_dq,
-    where => $self->_where_to_dq($attrs->{having})
-  };
-};
-
-sub _group_by_to_dq {
-  my ($self, $group, $from) = @_;
-  +{
-    type => DQ_GROUP,
-    by => [ $self->_select_field_list_to_dq($group) ],
-    from => $from,
-  };
-}
-
-around _table_to_dq => sub {
-  my ($orig, $self) = (shift, shift);
-  my ($spec) = @_;
-  if (my $ref = ref $spec ) {
-    if ($ref eq 'ARRAY') {
-      return $self->_join_to_dq(@$spec);
-    }
-    elsif ($ref eq 'HASH') {
-      my ($as, $table, $toomuch) = ( map
-        { $_ => $spec->{$_} }
-        ( grep { $_ !~ /^\-/ } keys %$spec )
-      );
-      $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$toomuch' key present" )
-        if defined $toomuch;
-
-      return +{
-        type => DQ_ALIAS,
-        alias => $self->_table_to_dq($table),
-        as => $as,
-      };
-    }
-  }
-  return $self->$orig(@_);
-};
-
-sub _join_to_dq {
-  my ($self, $from, @joins) = @_;
-
-  my $cur_dq = $self->_table_to_dq($from);
-
-  foreach my $join (@joins) {
-    my ($to, $on) = @$join;
-
-    # check whether a join type exists
-    my $to_jt = ref($to) eq 'ARRAY' ? $to->[0] : $to;
-    my $join_type;
-    if (ref($to_jt) eq 'HASH' and defined($to_jt->{-join_type})) {
-      $join_type = $to_jt->{-join_type};
-      $join_type =~ s/^\s+ | \s+$//xg;
-    }
-
-    $join_type ||= $self->{_default_jointype};
-
-    $cur_dq = +{
-      type => DQ_JOIN,
-      ($join_type ? (outer => $join_type) : ()),
-      join => [ $cur_dq, $self->_table_to_dq($to) ],
-      ($on
-        ? (on => $self->_expr_to_dq($self->_expand_join_condition($on)))
-        : ()),
-    };
-  }
-
-  return $cur_dq;
-}
-
-sub _expand_join_condition {
-  my ($self, $cond) = @_;
-
-  # Backcompat for the old days when a plain hashref
-  # { 't1.col1' => 't2.col2' } meant ON t1.col1 = t2.col2
-  # Once things settle we should start warning here so that
-  # folks unroll their hacks
-  if (
-    ref $cond eq 'HASH'
-      and
-    keys %$cond == 1
-      and
-    (keys %$cond)[0] =~ /\./
-      and
-    ! ref ( (values %$cond)[0] )
-  ) {
-    return +{ keys %$cond => { -ident => values %$cond } }
-  }
-  elsif ( ref $cond eq 'ARRAY' ) {
-    return [ map $self->_expand_join_condition($_), @$cond ];
-  }
-
-  return $cond;
 }
 
 1;
