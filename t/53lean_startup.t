@@ -60,6 +60,8 @@ BEGIN {
     Class::C3::Componentised
     Moo
     Sub::Quote
+
+    Data::Query::Constants
   /, $] < 5.010 ? ( 'Class::C3', 'MRO::Compat' ) : () }; # this is special-cased in DBIx/Class.pm
 
   $test_hook = sub {
