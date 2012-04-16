@@ -6,6 +6,7 @@ use base qw/DBIx::Class/;
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
 use DBIx::Class::ResultSetColumn;
+use Data::Query::Constants qw(DQ_JOIN DQ_IDENTIFIER DQ_ALIAS DQ_LITERAL);
 use Scalar::Util qw/blessed weaken/;
 use Try::Tiny;
 use Data::Compare (); # no imports!!! guard against insane architecture
@@ -258,6 +259,63 @@ sub _order_by_dq {
     return $self->_sqla_converter->_order_by_to_dq($o);
   }
   return undef;
+}
+
+sub _distinct_group_by {
+  my ($self, $attrs) = @_;
+  my $conv = $self->_sqla_converter;
+  my $from_dq = $conv->_table_to_dq($attrs->{from});
+  my %source_map =
+    map +($_->name => $_),
+      map $self->result_source->schema->source($_),
+        $self->result_source->schema->sources;
+  my %col_map;
+  {
+    my @recurse = $from_dq;
+    while (my $next = shift @recurse) {
+      if ($next->{type} eq DQ_JOIN) {
+        push @recurse, @{$next->{join}};
+        next;
+      }
+      if ($next->{type} eq DQ_ALIAS) {
+        if ($next->{alias}{type} eq DQ_IDENTIFIER) {
+          my $name = join('.',@{$next->{alias}{elements}});
+          my @cols = $source_map{$name}->columns;
+          @col_map{@cols} = ($next->{as}) x @cols;
+        }
+      }
+    }
+  }
+  my $select_list = $conv->_select_field_list_to_dq($attrs->{select});
+  my (@group_by, %group_seen);
+  foreach my $entry (@$select_list) {
+    $entry = $entry->{alias} if $entry->{type} eq DQ_ALIAS;
+    if ($entry->{type} eq DQ_IDENTIFIER) {
+      push @group_by, \$entry;
+      $group_seen{join('.',@{$entry->{elements}})} = 1;
+      if (my @el = @{$entry->{elements}} == 1) {
+        if (my $alias = $col_map{$el[0]}) {
+          $group_seen{join('.',$col_map{$el[0]},$el[0])} = 1;
+        }
+      }
+    } elsif ($entry->{type} eq DQ_LITERAL) {
+      # assuming you knew what you were doing, please brace for impact
+      push @group_by, \$entry;
+    }
+  }
+  if ($attrs->{order_by}) {
+    my $order_dq = $conv->_order_by_to_dq($attrs->{order_by});
+    while ($order_dq) {
+      if ($order_dq->{by}{type} eq DQ_IDENTIFIER) {
+        my @el = @{$order_dq->{by}{elements}};
+        unshift @el, $col_map{$el[0]} if @el == 1 and $col_map{$el[0]};
+        push @group_by, \$order_dq->{by}
+          unless $group_seen{join('.',@el)};
+      }
+      $order_dq = $order_dq->{from};
+    }
+  }
+  \@group_by;
 }
 
 =head2 search
@@ -2330,6 +2388,7 @@ sub _merge_with_rscond {
 
   my $alias = $self->{attrs}{alias};
 
+  no warnings 'once'; # piss off
   if (! defined $self->{cond}) {
     # just massage $data below
   }
@@ -3413,11 +3472,7 @@ sub _resolved_attrs {
     else {
       # distinct affects only the main selection part, not what prefetch may
       # add below.
-      $attrs->{group_by} = $source->storage->_group_over_selection (
-        $attrs->{from},
-        $attrs->{select},
-        $attrs->{order_by},
-      );
+      $attrs->{group_by} = $self->_distinct_group_by($attrs);
     }
   }
 

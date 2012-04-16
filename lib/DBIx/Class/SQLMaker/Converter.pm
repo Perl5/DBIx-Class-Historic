@@ -47,7 +47,7 @@ around _select_field_to_dq => sub {
 
     my $field_dq = $self->_op_to_dq(
       apply => $self->_ident_to_dq(uc($func)),
-      $self->_select_field_list_to_dq($args),
+      @{$self->_select_field_list_to_dq($args)},
     );
 
     return $field_dq unless $as;
@@ -80,7 +80,7 @@ sub _group_by_to_dq {
   my ($self, $group, $from) = @_;
   +{
     type => DQ_GROUP,
-    by => [ $self->_select_field_list_to_dq($group) ],
+    by => $self->_select_field_list_to_dq($group),
     from => $from,
   };
 }
