@@ -54,8 +54,8 @@ around _select_field_to_dq => sub {
 
     return +{
       type => DQ_ALIAS,
-      alias => $field_dq,
-      as => $as
+      from => $field_dq,
+      to => $as
     };
   } else {
     return $self->$orig(@_);
@@ -104,9 +104,14 @@ around _table_to_dq => sub {
         type => DQ_ALIAS,
         from => $self->_table_to_dq($table),
         to => $as,
-        'dbix-class.source_name' => $spec->{-rsrc}->source_name,
-        'dbix-class.join_path' => $spec->{-join_path},
-        'dbix-class.is_single' => $spec->{-is_single},
+        ($spec->{-rsrc}
+          ? (
+              'dbix-class.source_name' => $spec->{-rsrc}->source_name,
+              'dbix-class.join_path' => $spec->{-join_path},
+              'dbix-class.is_single' => $spec->{-is_single},
+            )
+          : ()
+        )
       };
     }
   }
@@ -118,8 +123,6 @@ sub _join_to_dq {
 
   my $cur_dq = $self->_table_to_dq($from);
 
-#{ local $Data::Dumper::Maxdepth = 3; ::Dwarn(\@joins); }
-
   foreach my $join (@joins) {
     my ($to, $on) = @$join;
 
@@ -127,12 +130,12 @@ sub _join_to_dq {
     my $to_jt = ref($to) eq 'ARRAY' ? $to->[0] : $to;
     my $join_type;
     if (ref($to_jt) eq 'HASH' and defined($to_jt->{-join_type})) {
-      $join_type = $to_jt->{-join_type};
+      $join_type = lc($to_jt->{-join_type});
       $join_type =~ s/^\s+ | \s+$//xg;
       undef($join_type) unless $join_type =~ s/^(left|right).*/$1/;
     }
 
-    $join_type ||= $self->{_default_jointype};
+    $join_type ||= lc($self->{_default_jointype});
 
     $cur_dq = +{
       type => DQ_JOIN,

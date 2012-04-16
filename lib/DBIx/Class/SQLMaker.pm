@@ -178,6 +178,10 @@ sub insert {
   next::method(@_);
 }
 
+sub _recurse_from {
+  scalar shift->_render_sqla(table => \@_);
+}
+
 1;
 
 =head1 OPERATORS
