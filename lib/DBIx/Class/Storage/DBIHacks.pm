@@ -26,7 +26,8 @@ sub _prune_unused_joins {
   my $self = shift;
   my ($from, $select, $where, $attrs) = @_;
 
-  return $from unless $self->_use_join_optimizer;
+  # XXX disabled temporarily while I hunt bigger game -- mst
+  return $from; # unless $self->_use_join_optimizer;
 
   if (ref $from ne 'ARRAY' || ref $from->[0] ne 'HASH' || ref $from->[1] ne 'ARRAY') {
     return $from;   # only standard {from} specs are supported

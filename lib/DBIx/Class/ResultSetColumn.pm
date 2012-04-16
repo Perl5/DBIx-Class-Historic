@@ -7,6 +7,8 @@ use base 'DBIx::Class';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
 
+use Data::Query::Constants qw(DQ_IDENTIFIER);
+
 # not importing first() as it will clash with our own method
 use List::Util ();
 
@@ -72,11 +74,22 @@ sub new {
   # analyze the order_by, and see if it is done over a function/nonexistentcolumn
   # if this is the case we will need to wrap a subquery since the result of RSC
   # *must* be a single column select
-  if (
-    scalar grep
-      { ! exists $colmap->{$_->[0]} }
-      ( $rsrc->schema->storage->_extract_order_criteria ($orig_attrs->{order_by} ) )
-  ) {
+
+  my $order_dq = $rs->_order_by_dq;
+  my $weirditude;
+
+  ORDER_DQ: while ($order_dq) {
+    if ($order_dq->{by}{type} eq DQ_IDENTIFIER) {
+      if (exists $colmap->{join '.', @{$order_dq->{by}{elements}}}) {
+        $order_dq = $order_dq->{from};
+        next ORDER_DQ;
+      }
+    }
+    $weirditude = 1;
+    last ORDER_DQ;
+  }
+
+  if ($weirditude) {
     # nuke the prefetch before collapsing to sql
     my $subq_rs = $rs->search;
     $subq_rs->{attrs}{join} = $subq_rs->_merge_joinpref_attr( $subq_rs->{attrs}{join}, delete $subq_rs->{attrs}{prefetch} );

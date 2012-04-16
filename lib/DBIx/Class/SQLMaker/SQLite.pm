@@ -3,9 +3,11 @@ package # Hide from PAUSE
 
 use base qw( DBIx::Class::SQLMaker );
 
+sub renderer_class { 'Data::Query::Renderer::SQL::SQLite' }
+
 #
 # SQLite does not understand SELECT ... FOR UPDATE
 # Disable it here
-sub _lock_select () { '' };
+sub _lock_select { '' };
 
 1;

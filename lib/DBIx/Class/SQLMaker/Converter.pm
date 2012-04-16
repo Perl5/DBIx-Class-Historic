@@ -1,9 +1,25 @@
 package DBIx::Class::SQLMaker::Converter;
 
-use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN);
+use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN DQ_SLICE);
 use Moo;
 
 extends 'SQL::Abstract::Converter';
+
+around _select_to_dq => sub {
+  my ($orig, $self) = (shift, shift);
+  my $attrs = $_[4];
+  my $orig_dq = $self->$orig(@_);
+  return $orig_dq unless $attrs->{limit};
+  +{
+    type => DQ_SLICE,
+    from => $orig_dq,
+    limit => $self->_value_to_dq($attrs->{limit}),
+    ($attrs->{offset}
+      ? (offset => $self->_value_to_dq($attrs->{offset}))
+      : ()
+    ),
+  };
+};
 
 around _select_field_to_dq => sub {
   my ($orig, $self) = (shift, shift);

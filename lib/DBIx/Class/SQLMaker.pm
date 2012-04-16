@@ -129,44 +129,12 @@ sub select {
     $limit = $self->__max_int;
   }
 
-
-  my ($sql, @bind);
-  if ($limit) {
-    # this is legacy code-flow from SQLA::Limit, it is not set in stone
-
-    ($sql, @bind) = $self->next::method ($table, $fields, $where);
-
-    my $limiter =
-      $self->can ('emulate_limit')  # also backcompat hook from SQLA::Limit
-        ||
-      do {
-        my $dialect = $self->limit_dialect
-          or $self->throw_exception( "Unable to generate SQL-limit - no limit dialect specified on $self, and no emulate_limit method found" );
-        $self->can ("_$dialect")
-          or $self->throw_exception(__PACKAGE__ . " does not implement the requested dialect '$dialect'");
-      }
-    ;
-
-    $sql = $self->$limiter (
-      $sql,
-      { %{$rs_attrs||{}}, _selector_sql => $fields },
-      $limit,
-      $offset
-    );
-  }
-  else {
-    ($sql, @bind) = $self->next::method ($table, $fields, $where, $rs_attrs->{order_by}, $rs_attrs);
-  }
-
-  push @{$self->{where_bind}}, @bind;
-
-# this *must* be called, otherwise extra binds will remain in the sql-maker
-  my @all_bind = $self->_assemble_binds;
+  my ($sql, @bind) = $self->next::method ($table, $fields, $where, $rs_attrs->{order_by}, { %{$rs_attrs}, limit => $limit, offset => $offset } );
 
   $sql .= $self->_lock_select ($rs_attrs->{for})
     if $rs_attrs->{for};
 
-  return wantarray ? ($sql, @all_bind) : $sql;
+  return wantarray ? ($sql, @bind) : $sql;
 }
 
 sub _assemble_binds {

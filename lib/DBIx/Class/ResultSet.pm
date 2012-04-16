@@ -250,6 +250,16 @@ sub new {
   $self;
 }
 
+sub _sqla_converter { shift->result_source->storage->sql_maker->converter }
+
+sub _order_by_dq {
+  my ($self) = @_;
+  if (my $o = $self->_resolved_attrs->{order_by}) {
+    return $self->_sqla_converter->_order_by_to_dq($o);
+  }
+  return undef;
+}
+
 =head2 search
 
 =over 4
