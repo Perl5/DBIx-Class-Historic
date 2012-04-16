@@ -16,6 +16,9 @@ use mro 'c3';
 use List::Util 'first';
 use Scalar::Util 'blessed';
 use Sub::Name 'subname';
+use Data::Query::Constants qw(
+  DQ_ALIAS DQ_JOIN DQ_IDENTIFIER DQ_ORDER DQ_LITERAL
+);
 use namespace::clean;
 
 #
@@ -26,8 +29,7 @@ sub _prune_unused_joins {
   my $self = shift;
   my ($from, $select, $where, $attrs) = @_;
 
-  # XXX disabled temporarily while I hunt bigger game -- mst
-  return $from; # unless $self->_use_join_optimizer;
+  return $from unless $self->_use_join_optimizer;
 
   if (ref $from ne 'ARRAY' || ref $from->[0] ne 'HASH' || ref $from->[1] ne 'ARRAY') {
     return $from;   # only standard {from} specs are supported
@@ -49,6 +51,7 @@ sub _prune_unused_joins {
     # add all their parents (as per joinpath which is an AoH { table => alias })
     $need_joins{$_} = 1 for map { values %$_ } map { @$_ } values %$_;
   }
+
   for my $j (@{$from}[1..$#$from]) {
     push @newfrom, $j if (
       (! $j->[0]{-alias}) # legacy crap
@@ -254,173 +257,165 @@ sub _adjust_select_args_for_complex_prefetch {
 # Although the method is pretty horrific, the worst thing that can
 # happen is for it to fail due to some scalar SQL, which in turn will
 # result in a vocal exception.
+
 sub _resolve_aliastypes_from_select_args {
-  my ( $self, $from, $select, $where, $attrs ) = @_;
+  my ($self, $from, $select, $where, $attrs) = @_; # ICK
 
   $self->throw_exception ('Unable to analyze custom {from}')
     if ref $from ne 'ARRAY';
 
   # what we will return
   my $aliases_by_type;
-
+  my $multiplying = $aliases_by_type->{multiplying} = {};
+  my $restricting = $aliases_by_type->{restricting} = {};
+  my $selecting = $aliases_by_type->{selecting} = {};
   # see what aliases are there to work with
   my $alias_list;
-  for (@$from) {
-    my $j = $_;
-    $j = $j->[0] if ref $j eq 'ARRAY';
-    my $al = $j->{-alias}
-      or next;
 
-    $alias_list->{$al} = $j;
-    $aliases_by_type->{multiplying}{$al} ||= $j->{-join_path}||[] if (
-      # not array == {from} head == can't be multiplying
-      ( ref($_) eq 'ARRAY' and ! $j->{-is_single} )
-        or
-      # a parent of ours is already a multiplier
-      ( grep { $aliases_by_type->{multiplying}{$_} } @{ $j->{-join_path}||[] } )
-    );
+  my %col_map;
+
+  my $schema = $self->schema;
+
+  my $conv = $self->sql_maker->converter;
+
+  my $from_dq = $conv->_table_to_dq($from);
+
+  my (%join_dq, @alias_dq);
+
+  while ($from_dq->{type} eq DQ_JOIN) {
+    die "Don't understand this from"
+      unless $from_dq->{right}{type} eq DQ_ALIAS;
+    push @alias_dq, $from_dq->{right};
+    $join_dq{$from_dq->{right}} = $from_dq;
+    my @columns = $schema->source($from_dq->{right}{'dbix-class.source_name'})
+                         ->columns;
+    @col_map{@columns} = ($from_dq->{right}{to}) x @columns;
+    $from_dq = $from_dq->{left};
+  }
+  die "Don't understand this from"
+    unless $from_dq->{type} eq DQ_ALIAS;
+  push @alias_dq, $from_dq;
+
+  foreach my $alias (reverse @alias_dq) {
+    $alias_list->{$alias->{to}} = $alias;
+    my $join_path = $alias->{'dbix-class.join_path'}||[];
+    unless ($alias->{is_single} and !grep { $multiplying->{$_} } @$join_path) {
+      $multiplying->{$alias->{to}} = $join_path;
+    }
+    unless ($join_dq{$alias}{outer}) {
+      $restricting->{$alias->{to}} ||= $join_path;
+    }
   }
 
-  # get a column to source/alias map (including unqualified ones)
-  my $colinfo = $self->_resolve_column_info ($from);
-
-  # set up a botched SQLA
-  my $sql_maker = $self->sql_maker;
-
-  # these are throw away results, do not pollute the bind stack
-  local $sql_maker->{select_bind};
-  local $sql_maker->{where_bind};
-  local $sql_maker->{group_bind};
-  local $sql_maker->{having_bind};
-
-  # we can't scan properly without any quoting (\b doesn't cut it
-  # everywhere), so unless there is proper quoting set - use our
-  # own weird impossible character.
-  # Also in the case of no quoting, we need to explicitly disable
-  # name_sep, otherwise sorry nasty legacy syntax like
-  # { 'count(foo.id)' => { '>' => 3 } } will stop working >:(
-  local $sql_maker->{quote_char} = $sql_maker->{quote_char};
-  local $sql_maker->{name_sep} = $sql_maker->{name_sep};
-
-  unless (defined $sql_maker->{quote_char} and length $sql_maker->{quote_char}) {
-    $sql_maker->{quote_char} = ["\x00", "\xFF"];
-    # if we don't unset it we screw up retarded but unfortunately working
-    # 'MAX(foo.bar)' => { '>', 3 }
-    $sql_maker->{name_sep} = '';
-  }
-
-  my ($lquote, $rquote, $sep) = map { quotemeta $_ } ($sql_maker->_quote_chars, $sql_maker->name_sep);
-
-  # generate sql chunks
-  my $to_scan = {
+  my %to_scan = (
     restricting => [
-      $sql_maker->_recurse_where ($where),
-      $sql_maker->_parse_rs_attrs ({
-        map { $_ => $attrs->{$_} } (qw/group_by having/)
-      }),
+      $conv->_where_to_dq($where),
+      ($attrs->{group_by} ? $conv->_group_by_to_dq($attrs->{group_by}) : ()),
+      ($attrs->{having} ? $conv->_where_to_dq($attrs->{having}) : ()),
     ],
     selecting => [
-      $sql_maker->_recurse_fields ($select),
-      ( map { $_->[0] } $self->_extract_order_criteria ($attrs->{order_by}, $sql_maker) ),
-    ],
-  };
-
-  # throw away empty chunks
-  $_ = [ map { $_ || () } @$_ ] for values %$to_scan;
-
-  # first loop through all fully qualified columns and get the corresponding
-  # alias (should work even if they are in scalarrefs)
-  for my $alias (keys %$alias_list) {
-    my $al_re = qr/
-      $lquote $alias $rquote $sep
-        |
-      \b $alias \.
-    /x;
-
-    for my $type (keys %$to_scan) {
-      for my $piece (@{$to_scan->{$type}}) {
-        $aliases_by_type->{$type}{$alias} ||= $alias_list->{$alias}{-join_path}||[]
-          if ($piece =~ $al_re);
-      }
-    }
-  }
-
-  # now loop through unqualified column names, and try to locate them within
-  # the chunks
-  for my $col (keys %$colinfo) {
-    next if $col =~ / \. /x;   # if column is qualified it was caught by the above
-
-    my $col_re = qr/ $lquote $col $rquote /x;
-
-    for my $type (keys %$to_scan) {
-      for my $piece (@{$to_scan->{$type}}) {
-        if ($piece =~ $col_re) {
-          my $alias = $colinfo->{$col}{-source_alias};
-          $aliases_by_type->{$type}{$alias} ||= $alias_list->{$alias}{-join_path}||[];
+      @{$conv->_select_field_list_to_dq($select)},
+      ($attrs->{order_by}
+        ? $self->_extract_by_from_order_by(
+            $conv->_order_by_to_dq($attrs->{order_by})
+          )
+        : ())
+    ]
+  );
+  foreach my $type (keys %to_scan) {
+    my $this_type = $aliases_by_type->{$type};
+    $self->_scan_identifiers(
+      sub {
+        my ($node) = @_;
+        my ($col, $alias) = reverse @{$node->{elements}};
+        $alias ||= $col_map{$col};
+        if ($alias) {
+          $this_type->{$alias} ||=
+            $alias_list->{$alias}{'dbix-class.join_path'} || []
         }
-      }
-    }
-  }
-
-  # Add any non-left joins to the restriction list (such joins are indeed restrictions)
-  for my $j (values %$alias_list) {
-    my $alias = $j->{-alias} or next;
-    $aliases_by_type->{restricting}{$alias} ||= $j->{-join_path}||[] if (
-      (not $j->{-join_type})
-        or
-      ($j->{-join_type} !~ /^left (?: \s+ outer)? $/xi)
+      },
+      @{$to_scan{$type}}
     );
   }
-
   return $aliases_by_type;
+}
+
+sub _extract_by_from_order_by {
+  my ($self, $order_dq) = @_;
+  my @by;
+  while ($order_dq && $order_dq->{type} eq DQ_ORDER) {
+    push @by, $order_dq->{by};
+    $order_dq = $order_dq->{from};
+  }
+  return @by;
+}
+
+sub _scan_identifiers {
+  my ($self, $cb, @queue) = @_;
+  while (my $node = shift @queue) {
+    if ($node->{type} and $node->{type} eq DQ_IDENTIFIER) {
+      $cb->($node);
+    } else {
+      push @queue,
+        grep ref($_) eq 'HASH',
+          map +(ref($_) eq 'ARRAY' ? @$_ : $_),
+            @{$node}{grep !/\./, keys %$node};
+    }
+  }
 }
 
 # This is the engine behind { distinct => 1 }
 sub _group_over_selection {
   my ($self, $from, $select, $order_by) = @_;
-
-  my $rs_column_list = $self->_resolve_column_info ($from);
-
-  my (@group_by, %group_index);
-
-  # the logic is: if it is a { func => val } we assume an aggregate,
-  # otherwise if \'...' or \[...] we assume the user knows what is
-  # going on thus group over it
-  for (@$select) {
-    if (! ref($_) or ref ($_) ne 'HASH' ) {
-      push @group_by, $_;
-      $group_index{$_}++;
-      if ($rs_column_list->{$_} and $_ !~ /\./ ) {
-        # add a fully qualified version as well
-        $group_index{"$rs_column_list->{$_}{-source_alias}.$_"}++;
+  my $conv = $self->sql_maker->converter;
+  my $from_dq = $conv->_table_to_dq($from);
+  my $schema = $self->schema;
+  my %col_map;
+  {
+    my @recurse = $from_dq;
+    while (my $next = shift @recurse) {
+      if ($next->{type} eq DQ_JOIN) {
+        push @recurse, @{$next}{qw(left right)};
+        next;
+      }
+      if ($next->{type} eq DQ_ALIAS) {
+        if (my $source_name = $next->{alias}{'dbix-class.source_name'}) {
+          my @cols = $schema->source($source_name)->columns;
+          @col_map{@cols} = ($next->{as}) x @cols;
+        }
       }
     }
   }
-
-  # add any order_by parts that are not already present in the group_by
-  # we need to be careful not to add any named functions/aggregates
-  # i.e. order_by => [ ... { count => 'foo' } ... ]
-  my @leftovers;
-  for ($self->_extract_order_criteria($order_by)) {
-    # only consider real columns (for functions the user got to do an explicit group_by)
-    if (@$_ != 1) {
-      push @leftovers, $_;
-      next;
+  my $select_list = $conv->_select_field_list_to_dq($select);
+  my (@group_by, %group_seen);
+  foreach my $entry (@$select_list) {
+    $entry = $entry->{alias} if $entry->{type} eq DQ_ALIAS;
+    if ($entry->{type} eq DQ_IDENTIFIER) {
+      push @group_by, \$entry;
+      $group_seen{join('.',@{$entry->{elements}})} = 1;
+      if (my @el = @{$entry->{elements}} == 1) {
+        if (my $alias = $col_map{$el[0]}) {
+          $group_seen{join('.',$col_map{$el[0]},$el[0])} = 1;
+        }
+      }
+    } elsif ($entry->{type} eq DQ_LITERAL) {
+      # assuming you knew what you were doing, please brace for impact
+      push @group_by, \$entry;
     }
-    my $chunk = $_->[0];
-    my $colinfo = $rs_column_list->{$chunk} or do {
-      push @leftovers, $_;
-      next;
-    };
-
-    $chunk = "$colinfo->{-source_alias}.$chunk" if $chunk !~ /\./;
-    push @group_by, $chunk unless $group_index{$chunk}++;
   }
-
-  return wantarray
-    ? (\@group_by, (@leftovers ? \@leftovers : undef) )
-    : \@group_by
-  ;
+  if ($order_by) {
+    my $order_dq = $conv->_order_by_to_dq($order_by);
+    while ($order_dq) {
+      if ($order_dq->{by}{type} eq DQ_IDENTIFIER) {
+        my @el = @{$order_dq->{by}{elements}};
+        unshift @el, $col_map{$el[0]} if @el == 1 and $col_map{$el[0]};
+        push @group_by, \$order_dq->{by}
+          unless $group_seen{join('.',@el)};
+      }
+      $order_dq = $order_dq->{from};
+    }
+  }
+  \@group_by;
 }
 
 sub _resolve_ident_sources {

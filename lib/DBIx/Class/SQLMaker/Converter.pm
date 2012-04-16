@@ -3,6 +3,7 @@ package DBIx::Class::SQLMaker::Converter;
 use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN DQ_SLICE);
 use Moo;
 
+require SQL::Abstract::Converter; # XXX Moo bug caused by the local
 extends 'SQL::Abstract::Converter';
 
 around _select_to_dq => sub {
@@ -13,9 +14,17 @@ around _select_to_dq => sub {
   +{
     type => DQ_SLICE,
     from => $orig_dq,
-    limit => $self->_value_to_dq($attrs->{limit}),
+    limit => do {
+      local $SQL::Abstract::Converter::Cur_Col_Meta
+        = { sqlt_datatype => 'integer' };
+      $self->_value_to_dq($attrs->{limit})
+    },
     ($attrs->{offset}
-      ? (offset => $self->_value_to_dq($attrs->{offset}))
+      ? (offset => do {
+          local $SQL::Abstract::Converter::Cur_Col_Meta
+            = { sqlt_datatype => 'integer' };
+          $self->_value_to_dq($attrs->{offset})
+        })
       : ()
     ),
   };

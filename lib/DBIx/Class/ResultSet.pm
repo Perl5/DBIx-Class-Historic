@@ -316,108 +316,24 @@ sub _distinct_group_by {
   \@group_by;
 }
 
+sub _group_over_selection {
+  shift->result_source->schema->storage
+       ->_group_over_selection(@_)
+}
+
 sub _extract_by_from_order_by {
-  my ($self, $order_dq) = @_;
-  my @by;
-  while ($order_dq && $order_dq->{type} eq DQ_ORDER) {
-    push @by, $order_dq->{by};
-    $order_dq = $order_dq->{from};
-  }
-  return @by;
+  shift->result_source->schema->storage
+       ->_extract_by_from_order_by(@_)
 }
 
 sub _scan_identifiers {
-  my ($self, $cb, @queue) = @_;
-  while (my $node = shift @queue) {
-    if ($node->{type} and $node->{type} eq DQ_IDENTIFIER) {
-      $cb->($node);
-    } else {
-      push @queue,
-        grep ref($_) eq 'HASH',
-          map +(ref($_) eq 'ARRAY' ? @$_ : $_),
-            @{$node}{grep !/\./, keys %$node};
-    }
-  }
+  shift->result_source->schema->storage
+       ->_scan_identifiers(@_)
 }
 
 sub _resolve_aliastypes_from_select_args {
-  my ($self, $from, $select, $where, $attrs) = @_; # ICK
-
-  $self->throw_exception ('Unable to analyze custom {from}')
-    if ref $from ne 'ARRAY';
-
-  # what we will return
-  my $aliases_by_type;
-  my $multiplying = $aliases_by_type->{multiplying} = {};
-  my $restricting = $aliases_by_type->{restricting} = {};
-  my $selecting = $aliases_by_type->{selecting} = {};
-  # see what aliases are there to work with
-  my $alias_list;
-
-  my %col_map;
-
-  my $schema = $self->result_source->schema;
-
-  my $conv = $self->_sqla_converter;
-
-  my $from_dq = $conv->_table_to_dq($from);
-
-  my (%join_dq, @alias_dq);
-
-  while ($from_dq->{type} eq DQ_JOIN) {
-    die "Don't understand this from"
-      unless $from_dq->{right}{type} eq DQ_ALIAS;
-    push @alias_dq, $from_dq->{right};
-    $join_dq{$from_dq->{right}} = $from_dq;
-    my @columns = $schema->source($from_dq->{right}{'dbix-class.source_name'})
-                         ->columns;
-    @col_map{@columns} = ($from_dq->{right}{to}) x @columns;
-    $from_dq = $from_dq->{left};
-  }
-  die "Don't understand this from"
-    unless $from_dq->{type} eq DQ_ALIAS;
-  push @alias_dq, $from_dq;
-
-  foreach my $alias (reverse @alias_dq) {
-    $alias_list->{$alias->{to}} = $alias;
-    my $join_path = $alias->{'dbix-class.join_path'}||[];
-    unless ($alias->{is_single} and !grep { $multiplying->{$_} } @$join_path) {
-      $multiplying->{$alias->{to}} = $join_path;
-    }
-    unless ($join_dq{$alias}{outer}) {
-      $restricting->{$alias->{to}} ||= $join_path;
-    }
-  }
-
-  my %to_scan = (
-    restricting => [
-      $conv->_where_to_dq($where),
-      ($attrs->{group_by} ? $conv->_group_by_to_dq($attrs->{group_by}) : ()),
-      ($attrs->{having} ? $conv->_where_to_dq($attrs->{having}) : ()),
-    ],
-    selecting => [
-      @{$conv->_select_field_list_to_dq($select)},
-      ($attrs->{order_by}
-        ? $self->_extract_by_from_order_by(
-            $conv->_order_by_to_dq($attrs->{order_by})
-          )
-        : ())
-    ]
-  );
-  foreach my $type (keys %to_scan) {
-    my $this_type = $aliases_by_type->{$type};
-    $self->_scan_identifiers(
-      sub {
-        my ($node) = @_;
-        my ($col, $alias) = reverse @{$node->{elements}};
-        $alias ||= $col_map{$col};
-        $this_type->{$alias} ||= $alias_list->{$alias}{'dbix-class.join_path'}
-          if $alias;
-      },
-      @{$to_scan{$type}}
-    );
-  }
-  return $aliases_by_type;
+  shift->result_source->schema->storage
+       ->_resolve_aliastypes_from_select_args(@_)
 }
 
 =head2 search
@@ -1977,7 +1893,7 @@ sub _rs_update_delete {
   # make a new $rs selecting only the PKs (that's all we really need for the subq)
   delete @{$attrs}{qw/collapse select _prefetch_selector_range as/};
   $attrs->{columns} = [ map { "$attrs->{alias}.$_" } @$idcols ];
-  #$attrs->{group_by} = \ '';  # FIXME - this is an evil hack, it causes the optimiser to kick in and throw away the LEFT joins
+  $attrs->{group_by} = [];  # FIXME - this is an evil hack, it causes the optimiser to kick in and throw away the LEFT joins
   my $subrs = (ref $self)->new($rsrc, $attrs);
 
   if (@$idcols == 1) {
@@ -3589,7 +3505,9 @@ sub _resolved_attrs {
     else {
       # distinct affects only the main selection part, not what prefetch may
       # add below.
-      $attrs->{group_by} = $self->_distinct_group_by($attrs);
+      $attrs->{group_by} = $self->_group_over_selection(
+        @{$attrs}{qw(from select order_by)}
+      );
     }
   }
 
