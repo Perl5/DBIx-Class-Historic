@@ -78,10 +78,9 @@ sub new {
   my $order_dq = $rs->_order_by_dq;
   my $weirditude;
 
-  ORDER_DQ: while ($order_dq) {
-    if ($order_dq->{by}{type} eq DQ_IDENTIFIER) {
-      if (exists $colmap->{join '.', @{$order_dq->{by}{elements}}}) {
-        $order_dq = $order_dq->{from};
+  ORDER_DQ: foreach my $by ($rs->_extract_by_from_order_by($order_dq)) {
+    if ($by->{type} eq DQ_IDENTIFIER) {
+      if (exists $colmap->{join '.', @{$by->{elements}}}) {
         next ORDER_DQ;
       }
     }

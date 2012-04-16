@@ -6,7 +6,9 @@ use base qw/DBIx::Class/;
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
 use DBIx::Class::ResultSetColumn;
-use Data::Query::Constants qw(DQ_JOIN DQ_IDENTIFIER DQ_ALIAS DQ_LITERAL);
+use Data::Query::Constants qw(
+  DQ_JOIN DQ_IDENTIFIER DQ_ALIAS DQ_LITERAL DQ_ORDER
+);
 use Scalar::Util qw/blessed weaken/;
 use Try::Tiny;
 use Data::Compare (); # no imports!!! guard against insane architecture
@@ -265,22 +267,18 @@ sub _distinct_group_by {
   my ($self, $attrs) = @_;
   my $conv = $self->_sqla_converter;
   my $from_dq = $conv->_table_to_dq($attrs->{from});
-  my %source_map =
-    map +($_->name => $_),
-      map $self->result_source->schema->source($_),
-        $self->result_source->schema->sources;
+  my $schema = $self->result_source->schema;
   my %col_map;
   {
     my @recurse = $from_dq;
     while (my $next = shift @recurse) {
       if ($next->{type} eq DQ_JOIN) {
-        push @recurse, @{$next->{join}};
+        push @recurse, @{$next}{qw(left right)};
         next;
       }
       if ($next->{type} eq DQ_ALIAS) {
-        if ($next->{alias}{type} eq DQ_IDENTIFIER) {
-          my $name = join('.',@{$next->{alias}{elements}});
-          my @cols = $source_map{$name}->columns;
+        if (my $source_name = $next->{alias}{'dbix-class.source_name'}) {
+          my @cols = $schema->source($source_name)->columns;
           @col_map{@cols} = ($next->{as}) x @cols;
         }
       }
@@ -316,6 +314,100 @@ sub _distinct_group_by {
     }
   }
   \@group_by;
+}
+
+sub _extract_by_from_order_by {
+  my ($self, $order_dq) = @_;
+  my @by;
+  while ($order_dq && $order_dq->{type} eq DQ_ORDER) {
+    push @by, $order_dq->{by};
+    $order_dq = $order_dq->{from};
+  }
+  return @by;
+}
+
+sub _resolve_aliastypes_from_select_args {
+  my ($self, $from, $select, $where, $attrs) = @_; # ICK
+
+  $self->throw_exception ('Unable to analyze custom {from}')
+    if ref $from ne 'ARRAY';
+
+  # what we will return
+  my $aliases_by_type;
+  my $multiplying = $aliases_by_type->{multiplying} = {};
+  my $restricting = $aliases_by_type->{restricting} = {};
+  my $selecting = $aliases_by_type->{selecting} = {};
+  # see what aliases are there to work with
+  my $alias_list;
+
+  my %col_map;
+
+  my $schema = $self->result_source->schema;
+
+  my $conv = $self->_sqla_converter;
+
+  my $from_dq = $conv->_table_to_dq($from);
+
+  my (%join_dq, @alias_dq);
+
+  while ($from_dq->{type} eq DQ_JOIN) {
+    die "Don't understand this from"
+      unless $from_dq->{right}{type} eq DQ_ALIAS;
+    push @alias_dq, $from_dq->{right};
+    $join_dq{$from_dq->{right}} = $from_dq;
+    my @columns = $schema->source($from_dq->{right}{'dbix-class.source_name'})
+                         ->columns;
+    @col_map{@columns} = ($from_dq->{right}{to}) x @columns;
+    $from_dq = $from_dq->{left};
+  }
+  die "Don't understand this from"
+    unless $from_dq->{type} eq DQ_ALIAS;
+  push @alias_dq, $from_dq;
+
+  foreach my $alias (reverse @alias_dq) {
+    $alias_list->{$alias->{to}} = $alias;
+    my $join_path = $alias->{'dbix-class.join_path'}||[];
+    unless ($alias->{is_single} and !grep { $multiplying->{$_} } @$join_path) {
+      $multiplying->{$alias->{to}} = $join_path;
+    }
+    unless ($join_dq{$alias}{outer}) {
+      $restricting->{$alias->{to}} ||= $join_path;
+    }
+  }
+
+  my %to_scan = (
+    restricting => [
+      $conv->_where_to_dq($where),
+      ($attrs->{group_by} ? $conv->_group_by_to_dq($attrs->{group_by}) : ()),
+      ($attrs->{having} ? $conv->_where_to_dq($attrs->{having}) : ()),
+    ],
+    selecting => [
+      @{$conv->_select_field_list_to_dq($select)},
+      ($attrs->{order_by}
+        ? $self->_extract_by_from_order_by(
+            $conv->_order_by_to_dq($attrs->{order_by})
+          )
+        : ())
+    ]
+  );
+  foreach my $type (keys %to_scan) {
+    my $this_type = $aliases_by_type->{$type};
+    my @queue = @{$to_scan{$type}};
+    while (my $node = shift @queue) {
+      if ($node->{type} eq DQ_IDENTIFIER) {
+        my ($col, $alias) = reverse @{$node->{elements}};
+        $alias ||= $col_map{$col};
+        $this_type->{$alias} ||= $alias_list->{$alias}{'dbix-class.join_path'}
+          if $alias;
+      } else {
+        push @queue,
+          grep ref($_) eq 'HASH',
+            map +(ref($_) eq 'ARRAY' ? @$_ : $_),
+              @{$node}{grep !/./, keys %$node};
+      }
+    }
+  }
+  return $aliases_by_type;
 }
 
 =head2 search
@@ -1813,8 +1905,8 @@ sub _rs_update_delete {
     } else {
       $attrs->{from} = $storage->_prune_unused_joins ($attrs->{from}, $attrs->{select}, $cond, $attrs);
 
-      $relation_classifications = $storage->_resolve_aliastypes_from_select_args (
-        [ @{$attrs->{from}}[1 .. $#{$attrs->{from}}] ],
+      $relation_classifications = $self->_resolve_aliastypes_from_select_args(
+        $attrs->{from},
         $attrs->{select},
         $cond,
         $attrs

@@ -102,8 +102,11 @@ around _table_to_dq => sub {
 
       return +{
         type => DQ_ALIAS,
-        alias => $self->_table_to_dq($table),
-        as => $as,
+        from => $self->_table_to_dq($table),
+        to => $as,
+        'dbix-class.source_name' => $spec->{-rsrc}->source_name,
+        'dbix-class.join_path' => $spec->{-join_path},
+        'dbix-class.is_single' => $spec->{-is_single},
       };
     }
   }
@@ -115,6 +118,8 @@ sub _join_to_dq {
 
   my $cur_dq = $self->_table_to_dq($from);
 
+#{ local $Data::Dumper::Maxdepth = 3; ::Dwarn(\@joins); }
+
   foreach my $join (@joins) {
     my ($to, $on) = @$join;
 
@@ -124,6 +129,7 @@ sub _join_to_dq {
     if (ref($to_jt) eq 'HASH' and defined($to_jt->{-join_type})) {
       $join_type = $to_jt->{-join_type};
       $join_type =~ s/^\s+ | \s+$//xg;
+      undef($join_type) unless $join_type =~ s/^(left|right).*/$1/;
     }
 
     $join_type ||= $self->{_default_jointype};
@@ -131,7 +137,8 @@ sub _join_to_dq {
     $cur_dq = +{
       type => DQ_JOIN,
       ($join_type ? (outer => $join_type) : ()),
-      join => [ $cur_dq, $self->_table_to_dq($to) ],
+      left => $cur_dq,
+      right => $self->_table_to_dq($to),
       ($on
         ? (on => $self->_expr_to_dq($self->_expand_join_condition($on)))
         : ()),
