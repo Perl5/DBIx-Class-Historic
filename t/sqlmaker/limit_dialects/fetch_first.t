@@ -56,23 +56,23 @@ for my $ord_set (
   {
     order_by => \'title DESC',
     order_inner => 'title DESC',
-    order_outer => 'ORDER__BY__001 ASC',
+    order_outer => 'ORDER__BY__001',
     order_req => 'ORDER__BY__001 DESC',
     exselect_outer => 'ORDER__BY__001',
     exselect_inner => 'title AS ORDER__BY__001',
   },
   {
     order_by => { -asc => 'title'  },
-    order_inner => 'title ASC',
+    order_inner => 'title',
     order_outer => 'ORDER__BY__001 DESC',
-    order_req => 'ORDER__BY__001 ASC',
+    order_req => 'ORDER__BY__001',
     exselect_outer => 'ORDER__BY__001',
     exselect_inner => 'title AS ORDER__BY__001',
   },
   {
     order_by => { -desc => 'title' },
     order_inner => 'title DESC',
-    order_outer => 'ORDER__BY__001 ASC',
+    order_outer => 'ORDER__BY__001',
     order_req => 'ORDER__BY__001 DESC',
     exselect_outer => 'ORDER__BY__001',
     exselect_inner => 'title AS ORDER__BY__001',
@@ -96,16 +96,16 @@ for my $ord_set (
   {
     order_by => ['title', { -desc => 'bar' } ],
     order_inner => 'title, bar DESC',
-    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002 ASC',
+    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002',
     order_req => 'ORDER__BY__001, ORDER__BY__002 DESC',
     exselect_outer => 'ORDER__BY__001, ORDER__BY__002',
     exselect_inner => 'title AS ORDER__BY__001, bar AS ORDER__BY__002',
   },
   {
     order_by => { -asc => [qw{ title bar }] },
-    order_inner => 'title ASC, bar ASC',
+    order_inner => 'title, bar',
     order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002 DESC',
-    order_req => 'ORDER__BY__001 ASC, ORDER__BY__002 ASC',
+    order_req => 'ORDER__BY__001, ORDER__BY__002',
     exselect_outer => 'ORDER__BY__001, ORDER__BY__002',
     exselect_inner => 'title AS ORDER__BY__001, bar AS ORDER__BY__002',
   },
@@ -115,9 +115,9 @@ for my $ord_set (
       { -desc => [qw{bar}] },
       { -asc  => [qw{me.owner sensors}]},
     ],
-    order_inner => 'title, bar DESC, me.owner ASC, sensors ASC',
-    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002 ASC, me.owner DESC, ORDER__BY__003 DESC',
-    order_req => 'ORDER__BY__001, ORDER__BY__002 DESC, me.owner ASC, ORDER__BY__003 ASC',
+    order_inner => 'title, bar DESC, me.owner, sensors',
+    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002, me.owner DESC, ORDER__BY__003 DESC',
+    order_req => 'ORDER__BY__001, ORDER__BY__002 DESC, me.owner, ORDER__BY__003',
     exselect_outer => 'ORDER__BY__001, ORDER__BY__002, ORDER__BY__003',
     exselect_inner => 'title AS ORDER__BY__001, bar AS ORDER__BY__002, sensors AS ORDER__BY__003',
   },
@@ -199,7 +199,7 @@ is_same_sql_bind( $rs_selectas_top->search({})->as_query,
                       me.id, me.source, me.owner, me.title, me.price, owner.name
                     FROM books me
                     JOIN owners owner ON owner.id = me.owner
-                    WHERE ( source = ? )
+                    WHERE source = ?
                     FETCH FIRST 1 ROWS ONLY
                    )',
                   [ [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' }
