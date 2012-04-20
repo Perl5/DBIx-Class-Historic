@@ -141,7 +141,7 @@ sub _adjust_select_args_for_complex_prefetch {
         'A required group_by clause could not be constructed automatically due to a complex '
       . 'order_by criteria. Either order_by columns only (no functions) or construct a suitable '
       . 'group_by by hand'
-      )  if $unprocessed_order_chunks;
+      )  if @$unprocessed_order_chunks;
     }
 
     # we already optimized $inner_from above
@@ -168,6 +168,9 @@ sub _adjust_select_args_for_complex_prefetch {
 
   $from = [ @$from ];
 
+  # We'll need this in a moment
+  my $head_from = $from->[0];
+
   # so first generate the outer_from, up to the substitution point
   my @outer_from;
   while (my $j = shift @$from) {
@@ -190,10 +193,11 @@ sub _adjust_select_args_for_complex_prefetch {
     }
   }
 
-  # scan the *remaining* from spec against different attributes, and see which joins are needed
-  # in what role
+  # scan the *remaining* from spec against different attributes, and see
+  # which joins are needed in what role - we briefly re-add the old "head"
+  # from node so that the join path is correct for the top join
   my $outer_aliastypes =
-    $self->_resolve_aliastypes_from_select_args( $from, $outer_select, $where, $outer_attrs );
+    $self->_resolve_aliastypes_from_select_args( [ $head_from, @$from ], $outer_select, $where, $outer_attrs );
 
   # unroll parents
   my ($outer_select_chain, $outer_restrict_chain) = map { +{
@@ -232,7 +236,7 @@ sub _adjust_select_args_for_complex_prefetch {
       'A required group_by clause could not be constructed automatically due to a complex '
     . 'order_by criteria. Either order_by columns only (no functions) or construct a suitable '
     . 'group_by by hand'
-    ) if $unprocessed_order_chunks;
+    ) if @$unprocessed_order_chunks;
 
   }
 
@@ -401,9 +405,9 @@ sub _group_over_selection {
         next;
       }
       if ($next->{type} eq DQ_ALIAS) {
-        if (my $source_name = $next->{alias}{'dbix-class.source_name'}) {
+        if (my $source_name = $next->{'dbix-class.source_name'}) {
           my @cols = $schema->source($source_name)->columns;
-          @col_map{@cols} = ($next->{as}) x @cols;
+          @col_map{@cols} = ($next->{to}) x @cols;
         }
       }
     }
@@ -429,6 +433,7 @@ sub _group_over_selection {
       push @group_by, \$entry;
     }
   }
+  my @leftovers;
   if ($order_by) {
     my $order_dq = $conv->_order_by_to_dq($order_by);
     while ($order_dq) {
@@ -439,11 +444,13 @@ sub _group_over_selection {
           push @group_by, \$order_dq->{by}
             unless $group_seen{join('.',@el)};
         }
+      } else {
+        push @leftovers, $order_dq->{by};
       }
       $order_dq = $order_dq->{from};
     }
   }
-  \@group_by;
+  wantarray ? (\@group_by, \@leftovers) : \@group_by;
 }
 
 sub _resolve_ident_sources {
