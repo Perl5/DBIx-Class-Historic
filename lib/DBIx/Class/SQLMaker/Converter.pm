@@ -75,8 +75,11 @@ around _source_to_dq => sub {
   my ($orig, $self) = (shift, shift);
   my $attrs = $_[4]; # table, fields, where, order, attrs
   my $start_dq = $self->$orig(@_);
-  return $start_dq unless $attrs->{group_by};
-  my $grouped_dq = $self->_group_by_to_dq($attrs->{group_by}, $start_dq);
+  # if we have HAVING but no GROUP BY we render an empty DQ_GROUP
+  # node, which causes DQ to recognise the HAVING as being what it is.
+  # This ... is kinda bull. But that's how HAVING is specified.
+  return $start_dq unless $attrs->{group_by} or $attrs->{having};
+  my $grouped_dq = $self->_group_by_to_dq($attrs->{group_by}||[], $start_dq);
   return $grouped_dq unless $attrs->{having};
   +{
     type => DQ_WHERE,
