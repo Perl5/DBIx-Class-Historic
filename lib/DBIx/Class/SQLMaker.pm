@@ -140,9 +140,10 @@ sub select {
   my %final_attrs = (%{$rs_attrs}, limit => $limit, offset => $offset);
 
   if ($offset and $self->limit_requires_order_by_stability_check) {
-     my $source = $rs_attrs->{_rsroot_rsrc};
+    my $source = $rs_attrs->{_rsroot_rsrc};
     unless (
       $final_attrs{order_is_stable}
+      = $final_attrs{preserve_order}
       = $source->schema->storage
                ->_order_by_is_stable(
                    @final_attrs{qw(from order_by where)}

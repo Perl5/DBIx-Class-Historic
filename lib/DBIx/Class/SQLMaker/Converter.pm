@@ -28,6 +28,9 @@ around _select_to_dq => sub {
     ),
     ($attrs->{order_is_stable}
       ? (order_is_stable => 1)
+      : ()),
+    ($attrs->{preserve_order}
+      ? (preserve_order => 1)
       : ())
   };
 };
