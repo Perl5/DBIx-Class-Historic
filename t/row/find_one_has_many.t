@@ -26,7 +26,7 @@ s/^'//, s/'\z// for @bind; # why does DBIC::DebugObj not do this?
 is_same_sql_bind (
   $sql,
   \@bind,
-  'SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track FROM cd me WHERE ( ( me.artist = ? AND me.title = ? ) ) ORDER BY year ASC',
+  'SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track FROM cd me WHERE ( ( me.artist = ? AND me.title = ? ) ) ORDER BY year',
   [21, 'Compilation from 1975'],
   'find_related only uses foreign key condition once',
 );
