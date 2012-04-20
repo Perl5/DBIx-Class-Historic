@@ -42,7 +42,7 @@ is_same_sql_bind(
           LEFT JOIN track tracks
             ON tracks.cd = cds_unordered.cdid
         WHERE ( me.rank = ? )
-        ORDER BY tracks.position DESC, me.name ASC, me.artistid DESC
+        ORDER BY tracks.position DESC, me.name, me.artistid DESC
         LIMIT ?
         OFFSET ?
       ) cds_unordered
@@ -50,7 +50,7 @@ is_same_sql_bind(
       LEFT JOIN track tracks
         ON tracks.cd = cds_unordered.cdid
     WHERE ( me.rank = ? )
-    ORDER BY tracks.position DESC, me.name ASC, me.artistid DESC
+    ORDER BY tracks.position DESC, me.name, me.artistid DESC
   )},
   [
     [ { sqlt_datatype => 'integer', dbic_colname => 'me.rank' } => 13 ],
