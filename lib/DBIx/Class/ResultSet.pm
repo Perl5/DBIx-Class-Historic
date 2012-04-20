@@ -1373,7 +1373,7 @@ sub _construct_objects {
       );
       my @ord_cols = map {
         $_->{type} eq DQ_IDENTIFIER
-          ? join(',',@{$_->{elements}})
+          ? join('.',@{$_->{elements}})
           : '__TOTALLY_BOGUS_DUDE__'
       } @order_by_dq;
 
