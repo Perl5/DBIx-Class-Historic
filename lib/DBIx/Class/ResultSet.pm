@@ -3075,7 +3075,7 @@ sub is_paged {
 
 sub is_ordered {
   my ($self) = @_;
-  return scalar $self->result_source->storage->_extract_order_criteria($self->{attrs}{order_by});
+  return $self->_sqla_converter->_order_by_to_dq($self->{attrs}{order_by});
 }
 
 =head2 related_resultset
