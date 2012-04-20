@@ -39,7 +39,8 @@ sub _prune_unused_joins {
 
   # a grouped set will not be affected by amount of rows. Thus any
   # {multiplying} joins can go
-  delete $aliastypes->{multiplying} if $attrs->{group_by};
+  delete $aliastypes->{multiplying}
+    if $attrs->{group_by} or $attrs->{prune_multiplying};
 
   my @newfrom = $from->[0]; # FROM head is always present
 
@@ -115,7 +116,7 @@ sub _adjust_select_args_for_complex_prefetch {
     local $self->{_use_join_optimizer} = 1;
 
     my $inner_from = $self->_prune_unused_joins ($from, $inner_select, $where, {
-      group_by => ['dummy'], %$inner_attrs,
+      prune_multiplying => 1, %$inner_attrs,
     });
 
     my $inner_aliastypes =
