@@ -3,7 +3,6 @@ package DBIx::Class::SQLMaker::Converter;
 use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN DQ_SLICE);
 use Moo;
 
-require SQL::Abstract::Converter; # XXX Moo bug caused by the local
 extends 'SQL::Abstract::Converter';
 
 around _select_to_dq => sub {
@@ -27,6 +26,9 @@ around _select_to_dq => sub {
         })
       : ()
     ),
+    ($attrs->{order_is_stable}
+      ? (order_is_stable => 1)
+      : ())
   };
 };
 

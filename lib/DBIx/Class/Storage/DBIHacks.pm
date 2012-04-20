@@ -17,7 +17,7 @@ use List::Util 'first';
 use Scalar::Util 'blessed';
 use Sub::Name 'subname';
 use Data::Query::Constants qw(
-  DQ_ALIAS DQ_JOIN DQ_IDENTIFIER DQ_ORDER DQ_LITERAL
+  DQ_ALIAS DQ_JOIN DQ_IDENTIFIER DQ_ORDER DQ_LITERAL DQ_OPERATOR
 );
 use namespace::clean;
 
@@ -705,9 +705,27 @@ sub _extract_order_criteria {
 sub _order_by_is_stable {
   my ($self, $ident, $order_by, $where) = @_;
 
+  my @ident_dq;
+  my $conv = $self->sql_maker->converter;
+
+  $self->_scan_identifiers(
+    sub { push @ident_dq, $_[0] }, $conv->_order_by_to_dq($order_by)
+  );
+
+  if ($where) {
+    # old _extract_fixed_condition_columns logic
+    $self->_scan_nodes({
+      DQ_OPERATOR ,=> sub {
+        if (($_[0]->{operator}{'SQL.Naive'}||'') eq '=') {
+          push @ident_dq,
+            grep { $_->{type} eq DQ_IDENTIFIER } @{$_[0]->{args}};
+        }
+      }
+    }, $conv->_where_to_dq($where));
+  }
+
   my $colinfo = $self->_resolve_column_info($ident, [
-    (map { $_->[0] } $self->_extract_order_criteria($order_by)),
-    $where ? @{$self->_extract_fixed_condition_columns($where)} :(),
+    map { join('.', @{$_->{elements}}) } @ident_dq
   ]);
 
   return undef unless keys %$colinfo;
@@ -721,43 +739,6 @@ sub _order_by_is_stable {
   }
 
   return undef;
-}
-
-# returns an arrayref of column names which *definitely* have som
-# sort of non-nullable equality requested in the given condition
-# specification. This is used to figure out if a resultset is
-# constrained to a column which is part of a unique constraint,
-# which in turn allows us to better predict how ordering will behave
-# etc.
-#
-# this is a rudimentary, incomplete, and error-prone extractor
-# however this is OK - it is conservative, and if we can not find
-# something that is in fact there - the stack will recover gracefully
-# Also - DQ and the mst it rode in on will save us all RSN!!!
-sub _extract_fixed_condition_columns {
-  my ($self, $where, $nested) = @_;
-
-  return unless ref $where eq 'HASH';
-
-  my @cols;
-  for my $lhs (keys %$where) {
-    if ($lhs =~ /^\-and$/i) {
-      push @cols, ref $where->{$lhs} eq 'ARRAY'
-        ? ( map { $self->_extract_fixed_condition_columns($_, 1) } @{$where->{$lhs}} )
-        : $self->_extract_fixed_condition_columns($where->{$lhs}, 1)
-      ;
-    }
-    elsif ($lhs !~ /^\-/) {
-      my $val = $where->{$lhs};
-
-      push @cols, $lhs if (defined $val and (
-        ! ref $val
-          or
-        (ref $val eq 'HASH' and keys %$val == 1 and defined $val->{'='})
-      ));
-    }
-  }
-  return $nested ? @cols : \@cols;
 }
 
 1;

@@ -3,7 +3,9 @@ package # Hide from PAUSE
 
 use base qw( DBIx::Class::SQLMaker );
 
-sub renderer_class { 'Data::Query::Renderer::SQL::SQLite' }
+sub _build_renderer_class {
+  Module::Runtime::use_module('Data::Query::Renderer::SQL::SQLite')
+}
 
 #
 # SQLite does not understand SELECT ... FOR UPDATE

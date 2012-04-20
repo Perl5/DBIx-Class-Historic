@@ -49,6 +49,12 @@ use Moo;
 
 has limit_dialect => (is => 'rw', trigger => sub { shift->clear_renderer });
 
+has limit_requires_order_by_stability_check
+  => (is => 'rw', default => sub { 0 });
+
+has limit_enforces_order_by_stability
+  => (is => 'rw', default => sub { 0 });
+
 # for when I need a normalized l/r pair
 sub _quote_chars {
   map
@@ -57,7 +63,9 @@ sub _quote_chars {
   ;
 }
 
-sub converter_class { 'DBIx::Class::SQLMaker::Converter' }
+sub _build_converter_class {
+  Module::Runtime::use_module('DBIx::Class::SQLMaker::Converter')
+}
 
 # FIXME when we bring in the storage weaklink, check its schema
 # weaklink and channel through $schema->throw_exception
@@ -129,7 +137,39 @@ sub select {
     $limit = $self->__max_int;
   }
 
-  my ($sql, @bind) = $self->next::method ($table, $fields, $where, $rs_attrs->{order_by}, { %{$rs_attrs}, limit => $limit, offset => $offset } );
+  my %final_attrs = (%{$rs_attrs}, limit => $limit, offset => $offset);
+
+  if ($offset and $self->limit_requires_order_by_stability_check) {
+     my $source = $rs_attrs->{_rsroot_rsrc};
+    unless (
+      $final_attrs{order_is_stable}
+      = $source->schema->storage
+               ->_order_by_is_stable(
+                   @final_attrs{qw(from order_by where)}
+                 )
+    ) {
+      if ($self->limit_enforces_order_by_stability) {
+        if ($self->converter->_order_by_to_dq($final_attrs{order_by})) {
+          $self->throw_exception(
+            'Current limit/offset implementation requires a stable order for offset'
+          );
+        }
+        if (my $ident_cols = $source->_identifying_column_set) {
+          $final_attrs{order_by} = [
+            map "$final_attrs{alias}.$_", @$ident_cols
+          ];
+          $final_attrs{order_is_stable} = 1;
+        } else {
+          $self->throw_exception(sprintf(
+            'Unable to auto-construct stable order criteria for "skimming type" 
+limit '
+          . "dialect based on source '%s'", $source->name) );
+        }
+      }
+    }
+  }
+
+  my ($sql, @bind) = $self->next::method ($table, $fields, $where, $final_attrs{order_by}, \%final_attrs );
 
   $sql .= $self->_lock_select ($rs_attrs->{for})
     if $rs_attrs->{for};
