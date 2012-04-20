@@ -173,13 +173,13 @@ for ($cd_rs->all) {
             LEFT JOIN track tracks ON tracks.cd = me.cdid
           WHERE ( me.cdid IS NOT NULL )
           GROUP BY me.cdid
-          ORDER BY track_count DESC, maxtr ASC
+          ORDER BY track_count DESC, maxtr
           LIMIT ?
         ) me
         LEFT JOIN track tracks ON tracks.cd = me.cdid
         LEFT JOIN liner_notes liner_notes ON liner_notes.liner_id = me.cdid
       WHERE ( me.cdid IS NOT NULL )
-      ORDER BY track_count DESC, maxtr ASC
+      ORDER BY track_count DESC, maxtr
     )',
     [[$ROWS => 2]],
     'next() query generated expected SQL',
@@ -352,10 +352,10 @@ for ($cd_rs->all) {
           FROM (SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track, COUNT( tags.tag ) AS test_count
                 FROM cd me LEFT JOIN tags tags ON tags.cd = me.cdid
             GROUP BY me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track, tags.tag
-            ORDER BY tags.tag ASC LIMIT ?)
+            ORDER BY tags.tag LIMIT ?)
             me
           LEFT JOIN tags tags ON tags.cd = me.cdid
-         ORDER BY tags.tag ASC
+         ORDER BY tags.tag
         )
     }, [[$ROWS => 1]]);
 }
