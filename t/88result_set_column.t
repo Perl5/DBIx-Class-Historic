@@ -162,7 +162,7 @@ my $pob_rs = $rs->search({}, {
 });
 is_same_sql_bind (
   $pob_rs->get_column("me.title")->as_query,
-  '(SELECT me.title FROM (SELECT me.title, tracks.title FROM cd me LEFT JOIN track tracks ON tracks.cd = me.cdid GROUP BY me.title, tracks.title ORDER BY position ASC) me)',
+  '(SELECT me.title FROM (SELECT me.title, tracks.title FROM cd me LEFT JOIN track tracks ON tracks.cd = me.cdid GROUP BY me.title, tracks.title ORDER BY position) me)',
   [],
   'Correct SQL for prefetch/order_by/group_by'
 );
