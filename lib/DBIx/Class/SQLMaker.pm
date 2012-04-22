@@ -44,8 +44,8 @@ use mro 'c3';
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
-use namespace::clean;
 use Moo;
+use namespace::clean;
 
 has limit_dialect => (is => 'rw', trigger => sub { shift->clear_renderer });
 
