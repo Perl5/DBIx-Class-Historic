@@ -95,6 +95,7 @@ sub _adjust_select_args_for_complex_prefetch {
   # on the outside we substitute any function for its alias
   my $outer_select = [ @$select ];
   my $inner_select = [];
+  my %seen_inner;
 
   my ($p_start, $p_end) = @{$outer_attrs->{_prefetch_selector_range}};
   for my $i (0 .. $p_start - 1, $p_end + 1 .. $#$outer_select) {
@@ -104,6 +105,8 @@ sub _adjust_select_args_for_complex_prefetch {
       $sel->{-as} ||= $attrs->{as}[$i];
       $outer_select->[$i] = join ('.', $attrs->{alias}, ($sel->{-as} || "inner_column_$i") );
     }
+
+    $seen_inner{$sel} = 1;
 
     push @$inner_select, $sel;
 
@@ -115,12 +118,13 @@ sub _adjust_select_args_for_complex_prefetch {
   # the fake group_by is so that the pruner throws away all non-selecting, non-restricting
   # multijoins (since we def. do not care about those inside the subquery)
 
-  my $inner_subq = do {
+  my $from_copy = $from;
+  my $inner_subq = sub {
 
     # must use it here regardless of user requests
     local $self->{_use_join_optimizer} = 1;
 
-    my $inner_from = $self->_prune_unused_joins ($from, $inner_select, $where, {
+    my $inner_from = $self->_prune_unused_joins ($from_copy, $inner_select, $where, {
       prune_multiplying => 1, %$inner_attrs,
     });
 
@@ -154,7 +158,7 @@ sub _adjust_select_args_for_complex_prefetch {
     local $self->{_use_join_optimizer} = 0;
 
     # generate the subquery
-    $self->_select_args_to_query (
+    scalar $self->_select_args_to_query (
       $inner_from,
       $inner_select,
       $where,
@@ -179,16 +183,17 @@ sub _adjust_select_args_for_complex_prefetch {
 
   # so first generate the outer_from, up to the substitution point
   my @outer_from;
+  my $subq_container;
   while (my $j = shift @$from) {
     $j = [ $j ] unless ref $j eq 'ARRAY'; # promote the head-from to an AoH
 
     if ($j->[0]{-alias} eq $attrs->{alias}) { # time to swap
 
-      push @outer_from, [
+      push @outer_from, $subq_container = [
         {
           -alias => $attrs->{alias},
           -rsrc => $j->[0]{-rsrc},
-          $attrs->{alias} => $inner_subq,
+          $attrs->{alias} => '__DUMMY__',
         },
         @{$j}[1 .. $#$j],
       ];
@@ -214,19 +219,37 @@ sub _adjust_select_args_for_complex_prefetch {
   # also throw in a group_by if a non-selecting multiplier,
   # to guard against cross-join explosions
   my $need_outer_group_by;
+  my @extra_outer_from;
   while (my $j = shift @$from) {
     my $alias = $j->[0]{-alias};
 
     if (
       $outer_select_chain->{$alias}
     ) {
-      push @outer_from, $j
+      push @outer_from, $j;
+      push @extra_outer_from, $j;
     }
     elsif ($outer_restrict_chain->{$alias}) {
       push @outer_from, $j;
+      push @extra_outer_from, $j;
       $need_outer_group_by ||= $outer_aliastypes->{multiplying}{$alias} ? 1 : 0;
     }
   }
+
+  $self->_scan_identifiers(
+    sub {
+      if (
+        @{$_[0]->{elements}} > 1
+        and $_[0]->{elements}[0] eq $attrs->{alias}
+        and !$seen_inner{my $name = join('.', @{$_[0]->{elements}})}
+      ) {
+        push @$_, $name for $inner_select, $inner_attrs->{as};
+      }
+    },
+    $self->sqla_converter->_table_to_dq([ $subq_container, @extra_outer_from ])
+  );
+  
+  $subq_container->[0]{$attrs->{alias}} = $inner_subq->();
 
   # demote the outer_from head
   $outer_from[0] = $outer_from[0][0];
