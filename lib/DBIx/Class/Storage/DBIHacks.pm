@@ -21,6 +21,8 @@ use Data::Query::Constants qw(
 );
 use namespace::clean;
 
+sub sqla_converter { shift->sql_maker->converter }
+
 #
 # This code will remove non-selecting/non-restricting joins from
 # {from} specs, aiding the RDBMS query optimizer
@@ -281,7 +283,7 @@ sub _resolve_aliastypes_from_select_args {
 
   my $schema = $self->schema;
 
-  my $conv = $self->sql_maker->converter;
+  my $conv = $self->sqla_converter;
 
   my $from_dq = $conv->_table_to_dq($from);
 
@@ -394,7 +396,7 @@ sub _scan_nodes {
 # This is the engine behind { distinct => 1 }
 sub _group_over_selection {
   my ($self, $from, $select, $order_by) = @_;
-  my $conv = $self->sql_maker->converter;
+  my $conv = $self->sqla_converter;
   my $from_dq = $conv->_table_to_dq($from);
   my $schema = $self->schema;
   my %col_map;
@@ -618,95 +620,11 @@ sub _inner_join_to_node {
   return \@new_from;
 }
 
-# yet another atrocity: attempt to extract all columns from a
-# where condition by hooking _quote
-sub _extract_condition_columns {
-  my ($self, $cond, $sql_maker) = @_;
-
-  return [] unless $cond;
-
-  $sql_maker ||= $self->{_sql_ident_capturer} ||= do {
-    # FIXME - replace with a Moo trait
-    my $orig_sm_class = ref $self->sql_maker;
-    my $smic_class = "${orig_sm_class}::_IdentCapture_";
-
-    unless ($smic_class->isa('SQL::Abstract')) {
-
-      no strict 'refs';
-      *{"${smic_class}::_quote"} = subname "${smic_class}::_quote" => sub {
-        my ($self, $ident) = @_;
-        if (ref $ident eq 'SCALAR') {
-          $ident = $$ident;
-          my $storage_quotes = $self->sql_quote_char || '"';
-          my ($ql, $qr) = map
-            { quotemeta $_ }
-            (ref $storage_quotes eq 'ARRAY' ? @$storage_quotes : ($storage_quotes) x 2 )
-          ;
-
-          while ($ident =~ /
-            $ql (\w+) $qr
-              |
-            ([\w\.]+)
-          /xg) {
-            $self->{_captured_idents}{$1||$2}++;
-          }
-        }
-        else {
-          $self->{_captured_idents}{$ident}++;
-        }
-        return $ident;
-      };
-
-      *{"${smic_class}::_get_captured_idents"} = subname "${smic_class}::_get_captures" => sub {
-        (delete shift->{_captured_idents}) || {};
-      };
-
-      $self->inject_base ($smic_class, $orig_sm_class);
-
-    }
-
-    $smic_class->new();
-  };
-
-  $sql_maker->_recurse_where($cond);
-
-  return [ sort keys %{$sql_maker->_get_captured_idents} ];
-}
-
-sub _extract_order_criteria {
-  my ($self, $order_by, $sql_maker) = @_;
-
-  my $parser = sub {
-    my ($sql_maker, $order_by) = @_;
-
-    return scalar $sql_maker->_order_by_chunks ($order_by)
-      unless wantarray;
-
-    my @chunks;
-    for ($sql_maker->_order_by_chunks ($order_by) ) {
-      my $chunk = ref $_ ? $_ : [ $_ ];
-      $chunk->[0] =~ s/\s+ (?: ASC|DESC ) \s* $//ix;
-      push @chunks, $chunk;
-    }
-
-    return @chunks;
-  };
-
-  if ($sql_maker) {
-    return $parser->($sql_maker, $order_by);
-  }
-  else {
-    $sql_maker = $self->sql_maker;
-    local $sql_maker->{quote_char};
-    return $parser->($sql_maker, $order_by);
-  }
-}
-
 sub _order_by_is_stable {
   my ($self, $ident, $order_by, $where) = @_;
 
   my @ident_dq;
-  my $conv = $self->sql_maker->converter;
+  my $conv = $self->sqla_converter;
 
   $self->_scan_identifiers(
     sub { push @ident_dq, $_[0] }, $conv->_order_by_to_dq($order_by)

@@ -2,6 +2,7 @@ package DBIx::Class::SQLMaker::Converter;
 
 use Data::Query::Constants qw(DQ_ALIAS DQ_GROUP DQ_WHERE DQ_JOIN DQ_SLICE);
 use Moo;
+use namespace::clean;
 
 extends 'SQL::Abstract::Converter';
 
