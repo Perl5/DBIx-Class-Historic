@@ -168,7 +168,7 @@ is_same_sql_bind(
 
   is_same_sql_bind(
     $sql, \@bind,
-    q/SELECT `me`.`cdid`, `me`.`artist`, `me`.`title`, `me`.`year` FROM `cd` `me` ORDER BY `year` DESC, `title` ASC/, [],
+    q/SELECT `me`.`cdid`, `me`.`artist`, `me`.`title`, `me`.`year` FROM `cd` `me` ORDER BY `year` DESC, `title`/, [],
     'hashref ORDER BY okay (multiple values)'
   );
 
@@ -195,8 +195,8 @@ is_same_sql_bind(
 
 is_same_sql_bind(
   $sql, \@bind,
-  q/SELECT `me`.`cdid`, `me`.`artist`, `me`.`title`, `me`.`year` FROM `cd` `me` ORDER BY year DESC/, [],
-  'did not quote ORDER BY with scalarref (single value)'
+  q/SELECT `me`.`cdid`, `me`.`artist`, `me`.`title`, `me`.`year` FROM `cd` `me` ORDER BY `year` DESC/, [],
+  'identifier extracted for ORDER BY with scalarref (single value)'
 );
 
 
@@ -223,8 +223,8 @@ is_same_sql_bind(
 
 is_same_sql_bind(
   $sql, \@bind,
-  q/SELECT `me`.`cdid`, `me`.`artist`, `me`.`title`, `me`.`year` FROM `cd` `me` ORDER BY year DESC, title ASC/, [],
-  'did not quote ORDER BY with scalarref (multiple values)'
+  q/SELECT `me`.`cdid`, `me`.`artist`, `me`.`title`, `me`.`year` FROM `cd` `me` ORDER BY `year` DESC, `title`/, [],
+  'identifiers extracted for ORDER BY with scalarref (multiple values)'
 );
 
 
