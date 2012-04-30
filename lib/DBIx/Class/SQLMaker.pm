@@ -137,7 +137,7 @@ sub select {
     $limit = $self->__max_int;
   }
 
-  my %final_attrs = (%{$rs_attrs}, limit => $limit, offset => $offset);
+  my %final_attrs = (%{$rs_attrs||{}}, limit => $limit, offset => $offset);
 
   if ($offset and $self->limit_requires_order_by_stability_check) {
     my $source = $rs_attrs->{_rsroot_rsrc};
