@@ -14,7 +14,12 @@ my ($LIMIT, $OFFSET) = (
 
 my $schema = DBICTest->init_schema;
 
-$schema->storage->_sql_maker->limit_dialect ('SkipFirst');
+$schema->storage->_sql_maker->renderer_class(
+  Moo::Role->create_class_with_roles(qw(
+    Data::Query::Renderer::SQL::Naive
+    Data::Query::Renderer::SQL::Slice::SkipFirst
+  ))
+);
 
 my $rs_selectas_col = $schema->resultset ('BooksInLibrary')->search ({}, {
   '+select' => ['owner.name'],
@@ -132,9 +137,9 @@ is_same_sql_bind(
   '(
      SELECT SKIP ? FIRST ? [me].[id], [me].[owner]
      FROM [books] [me]
-     WHERE ( ( (EXISTS (
+     WHERE ( ( EXISTS (
        SELECT SKIP ? FIRST ? [owner].[id] FROM [owners] [owner] WHERE ( [books].[owner] = [owner].[id] )
-     )) AND [source] = ? ) )
+     ) AND [source] = ? ) )
  )',
   [
     [ $OFFSET => 2 ], #outer
