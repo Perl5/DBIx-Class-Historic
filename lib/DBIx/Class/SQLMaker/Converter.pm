@@ -60,10 +60,16 @@ around _select_field_to_dq => sub {
       );
     }
 
-    my $field_dq = $self->_op_to_dq(
-      apply => $self->_ident_to_dq(uc($func)),
-      @{$self->_select_field_list_to_dq($args)},
-    );
+    my $field_dq = do {
+      if ($func) {
+        $self->_op_to_dq(
+          apply => $self->_ident_to_dq(uc($func)),
+          @{$self->_select_field_list_to_dq($args)},
+        );
+      } else {
+        $self->_select_field_to_dq($args);
+      }
+    };
 
     return $field_dq unless $as;
 

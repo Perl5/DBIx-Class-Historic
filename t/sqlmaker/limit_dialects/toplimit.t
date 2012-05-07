@@ -11,8 +11,14 @@ my $schema = DBICTest->init_schema;
 # Trick the sqlite DB to use Top limit emulation
 # We could test all of this via $sq->$op directly,
 # but some conditions need a $rsrc
-delete $schema->storage->_sql_maker->{_cached_syntax};
-$schema->storage->_sql_maker->limit_dialect ('Top');
+$schema->storage->_sql_maker->renderer_class(
+  Moo::Role->create_class_with_roles(qw(
+    Data::Query::Renderer::SQL::Naive
+    Data::Query::Renderer::SQL::Slice::Top
+  ))
+);
+$schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
+$schema->storage->_sql_maker->limit_enforces_order_by_stability(1);
 
 my $books_45_and_owners = $schema->resultset ('BooksInLibrary')->search ({}, {
   prefetch => 'owner', rows => 2, offset => 3,
@@ -53,8 +59,8 @@ my $subq = $schema->resultset('Owners')->search({
 
 my $rs_selectas_rel = $schema->resultset('BooksInLibrary')->search ({}, {
   columns => [
-     { owner_name => 'owner.name' },
-     { owner_books => $subq->as_query },
+     { owner_name => { -as => 'owner_name', '' => 'owner.name' } },
+     { owner_books => { -as => 'owner_books', '' => $subq->as_query } },
   ],
   join => 'owner',
   rows => 2,
@@ -89,23 +95,23 @@ for my $ord_set (
   {
     order_by => \'title DESC',
     order_inner => 'title DESC',
-    order_outer => 'ORDER__BY__001 ASC',
+    order_outer => 'ORDER__BY__001',
     order_req => 'ORDER__BY__001 DESC',
     exselect_outer => 'ORDER__BY__001',
     exselect_inner => 'title AS ORDER__BY__001',
   },
   {
     order_by => { -asc => 'title'  },
-    order_inner => 'title ASC',
+    order_inner => 'title',
     order_outer => 'ORDER__BY__001 DESC',
-    order_req => 'ORDER__BY__001 ASC',
+    order_req => 'ORDER__BY__001',
     exselect_outer => 'ORDER__BY__001',
     exselect_inner => 'title AS ORDER__BY__001',
   },
   {
     order_by => { -desc => 'title' },
     order_inner => 'title DESC',
-    order_outer => 'ORDER__BY__001 ASC',
+    order_outer => 'ORDER__BY__001',
     order_req => 'ORDER__BY__001 DESC',
     exselect_outer => 'ORDER__BY__001',
     exselect_inner => 'title AS ORDER__BY__001',
@@ -129,16 +135,16 @@ for my $ord_set (
   {
     order_by => ['title', { -desc => 'bar' } ],
     order_inner => 'title, bar DESC',
-    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002 ASC',
+    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002',
     order_req => 'ORDER__BY__001, ORDER__BY__002 DESC',
     exselect_outer => 'ORDER__BY__001, ORDER__BY__002',
     exselect_inner => 'title AS ORDER__BY__001, bar AS ORDER__BY__002',
   },
   {
     order_by => { -asc => [qw{ title bar }] },
-    order_inner => 'title ASC, bar ASC',
+    order_inner => 'title, bar',
     order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002 DESC',
-    order_req => 'ORDER__BY__001 ASC, ORDER__BY__002 ASC',
+    order_req => 'ORDER__BY__001, ORDER__BY__002',
     exselect_outer => 'ORDER__BY__001, ORDER__BY__002',
     exselect_inner => 'title AS ORDER__BY__001, bar AS ORDER__BY__002',
   },
@@ -148,9 +154,9 @@ for my $ord_set (
       { -desc => [qw{bar}] },
       { -asc  => [qw{me.owner sensors}]},
     ],
-    order_inner => 'title, bar DESC, me.owner ASC, sensors ASC',
-    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002 ASC, me.owner DESC, ORDER__BY__003 DESC',
-    order_req => 'ORDER__BY__001, ORDER__BY__002 DESC, me.owner ASC, ORDER__BY__003 ASC',
+    order_inner => 'title, bar DESC, me.owner, sensors',
+    order_outer => 'ORDER__BY__001 DESC, ORDER__BY__002, me.owner DESC, ORDER__BY__003 DESC',
+    order_req => 'ORDER__BY__001, ORDER__BY__002 DESC, me.owner, ORDER__BY__003',
     exselect_outer => 'ORDER__BY__001, ORDER__BY__002, ORDER__BY__003',
     exselect_inner => 'title AS ORDER__BY__001, bar AS ORDER__BY__002, sensors AS ORDER__BY__003',
   },
@@ -263,7 +269,7 @@ my $rs_selectas_rel = $schema->resultset('BooksInLibrary')->search( { -exists =>
 
 is_same_sql_bind(
   $rs_selectas_rel->as_query,
-  '(SELECT TOP 1 me.id, me.owner  FROM books me WHERE ( ( (EXISTS (SELECT COUNT( * ) FROM owners owner WHERE ( books.owner = owner.id ))) AND source = ? ) ) )',
+  '(SELECT TOP 1 me.id, me.owner  FROM books me WHERE ( ( EXISTS (SELECT COUNT( * ) FROM owners owner WHERE ( books.owner = owner.id )) AND source = ? ) ) )',
   [
     [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' } => 'Library' ],
   ],
