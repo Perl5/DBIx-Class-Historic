@@ -163,8 +163,6 @@ sub _join_to_dq {
       undef($join_type) unless $join_type =~ s/^(left|right).*/$1/;
     }
 
-    $join_type ||= lc($self->{_default_jointype});
-
     $cur_dq = +{
       type => DQ_JOIN,
       ($join_type ? (outer => $join_type) : ()),
