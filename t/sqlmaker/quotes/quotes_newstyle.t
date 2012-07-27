@@ -43,9 +43,9 @@ eval { $rs->first };
 like($sql, qr/ORDER BY `\Q${order}\E`/, 'quoted ORDER BY with DESC (should use a scalarref anyway)');
 
 $rs = $schema->resultset('CD')->search({},
-            { 'order_by' => \$order });
+            { 'order_by' => \'RANDOM() DESC' });
 eval { $rs->first };
-like($sql, qr/ORDER BY \Q${order}\E/, 'did not quote ORDER BY with scalarref');
+like($sql, qr/ORDER BY \QRANDOM() DESC\E/, 'did not quote ORDER BY with scalarref');
 
 $schema->connection(
   $dsn,
