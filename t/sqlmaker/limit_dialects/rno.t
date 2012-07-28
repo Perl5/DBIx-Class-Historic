@@ -14,7 +14,12 @@ my ($TOTAL, $OFFSET) = (
 
 my $schema = DBICTest->init_schema;
 
-$schema->storage->_sql_maker->limit_dialect ('RowNumberOver');
+$schema->storage->_sql_maker->renderer_class(
+  Moo::Role->create_class_with_roles(qw(
+    Data::Query::Renderer::SQL::Naive
+    Data::Query::Renderer::SQL::Slice::RowNumberOver
+  ))
+);
 
 my $rs_selectas_col = $schema->resultset ('BooksInLibrary')->search ({}, {
   '+select' => ['owner.name'],
