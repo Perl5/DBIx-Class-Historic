@@ -14,10 +14,18 @@ my ($TOTAL, $OFFSET, $ROWS) = (
    DBIx::Class::SQLMaker::LimitDialects->__rows_bindtype,
 );
 
-my $s = DBICTest->init_schema (no_deploy => 1, );
-$s->storage->sql_maker->limit_dialect ('RowNum');
+my $schema = DBICTest->init_schema;
 
-my $rs = $s->resultset ('CD')->search({ id => 1 });
+$schema->storage->_sql_maker->renderer_class(
+  Moo::Role->create_class_with_roles(qw(
+    Data::Query::Renderer::SQL::Naive
+    Data::Query::Renderer::SQL::Slice::RowNum
+  ))
+);
+
+$schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
+
+my $rs = $schema->resultset ('CD')->search({ id => 1 });
 
 my $where_bind = [ { dbic_colname => 'id' }, 1 ];
 
@@ -30,24 +38,24 @@ for my $test_set (
       columns => [
         { id => 'foo.id' },
         { 'bar.id' => 'bar.id' },
-        { bleh => \'TO_CHAR (foo.womble, "blah")' },
+        { bleh => { '' => \'TO_CHAR (foo.womble, "blah")', -as => 'bleh' } },
       ]
     }),
     sql => '(
-      SELECT id, bar__id, bleh
+      SELECT foo.id, bar__id, bleh
       FROM (
-        SELECT id, bar__id, bleh, ROWNUM rownum__index
+        SELECT foo.id, bar__id, bleh, ROWNUM AS rownum__index
         FROM (
-          SELECT foo.id AS id, bar.id AS bar__id, TO_CHAR (foo.womble, "blah") AS bleh
+          SELECT foo.id, bar.id AS bar__id, TO_CHAR (foo.womble, "blah") AS bleh
             FROM cd me
           WHERE id = ?
-        ) me
-      ) me WHERE rownum__index BETWEEN ? AND ?
+        ) foo
+      ) foo WHERE rownum__index BETWEEN ? AND ?
     )',
     binds => [
       $where_bind,
       [ $OFFSET => 4 ],
-      [ $TOTAL => 4 ],
+      [ $OFFSET => 4 ],
     ],
   }, {
     name => 'Rownum subsel aliasing works correctly with unique order_by',
@@ -57,28 +65,28 @@ for my $test_set (
       columns => [
         { id => 'foo.id' },
         { 'bar.id' => 'bar.id' },
-        { bleh => \'TO_CHAR (foo.womble, "blah")' },
+        { bleh => { '' => \'TO_CHAR (foo.womble, "blah")', -as => 'bleh' } },
       ],
       order_by => [qw( artist title )],
     }),
     sql => '(
-      SELECT id, bar__id, bleh
+      SELECT foo.id, bar__id, bleh
       FROM (
-        SELECT id, bar__id, bleh, ROWNUM rownum__index
+        SELECT foo.id, bar__id, bleh, ROWNUM AS rownum__index
         FROM (
-          SELECT foo.id AS id, bar.id AS bar__id, TO_CHAR(foo.womble, "blah") AS bleh
+          SELECT foo.id, bar.id AS bar__id, TO_CHAR(foo.womble, "blah") AS bleh
             FROM cd me
           WHERE id = ?
           ORDER BY artist, title
-        ) me
+        ) foo
         WHERE ROWNUM <= ?
-      ) me
+      ) foo
       WHERE rownum__index >= ?
     )',
     binds => [
       $where_bind,
       [ $TOTAL => 4 ],
-      [ $OFFSET => 4 ],
+      [ $TOTAL => 4 ],
     ],
   },
  {
@@ -89,26 +97,26 @@ for my $test_set (
       columns => [
         { id => 'foo.id' },
         { 'bar.id' => 'bar.id' },
-        { bleh => \'TO_CHAR (foo.womble, "blah")' },
+        { bleh => { '' => \'TO_CHAR (foo.womble, "blah")', -as => 'bleh' } },
       ],
       order_by => 'artist',
     }),
     sql => '(
-      SELECT id, bar__id, bleh
+      SELECT foo.id, bar__id, bleh
       FROM (
-        SELECT id, bar__id, bleh, ROWNUM rownum__index
+        SELECT foo.id, bar__id, bleh, ROWNUM AS rownum__index
         FROM (
-          SELECT foo.id AS id, bar.id AS bar__id, TO_CHAR(foo.womble, "blah") AS bleh
+          SELECT foo.id, bar.id AS bar__id, TO_CHAR(foo.womble, "blah") AS bleh
             FROM cd me
           WHERE id = ?
           ORDER BY artist
-        ) me
-      ) me
+        ) foo
+      ) foo
       WHERE rownum__index BETWEEN ? and ?
     )',
     binds => [
       $where_bind,
-      [ $OFFSET => 4 ],
+      [ $TOTAL => 4 ],
       [ $TOTAL => 4 ],
     ],
   }, {
@@ -122,19 +130,19 @@ for my $test_set (
       ]
     }),
     sql => '(
-      SELECT id, ends_with_me__id
+      SELECT foo.id, ends_with_me__id
       FROM (
-        SELECT id, ends_with_me__id, ROWNUM rownum__index
+        SELECT foo.id, ends_with_me__id, ROWNUM AS rownum__index
         FROM (
-          SELECT foo.id AS id, ends_with_me.id AS ends_with_me__id
+          SELECT foo.id, ends_with_me.id AS ends_with_me__id
             FROM cd me
           WHERE id = ?
-        ) me
-      ) me WHERE rownum__index BETWEEN ? AND ?
+        ) foo
+      ) foo WHERE rownum__index BETWEEN ? AND ?
     )',
     binds => [
       $where_bind,
-      [ $OFFSET => 4 ],
+      [ $TOTAL => 4 ],
       [ $TOTAL => 5 ],
     ],
   }, {
@@ -149,23 +157,23 @@ for my $test_set (
       order_by => [qw( year artist title )],
     }),
     sql => '(
-      SELECT id, ends_with_me__id
+      SELECT foo.id, ends_with_me__id
       FROM (
-        SELECT id, ends_with_me__id, ROWNUM rownum__index
+        SELECT foo.id, ends_with_me__id, ROWNUM AS rownum__index
         FROM (
-          SELECT foo.id AS id, ends_with_me.id AS ends_with_me__id
+          SELECT foo.id, ends_with_me.id AS ends_with_me__id
             FROM cd me
           WHERE id = ?
           ORDER BY year, artist, title
-        ) me
+        ) foo
         WHERE ROWNUM <= ?
-      ) me
+      ) foo
       WHERE rownum__index >= ?
     )',
     binds => [
       $where_bind,
       [ $TOTAL => 5 ],
-      [ $OFFSET => 4 ],
+      [ $TOTAL => 4 ],
     ],
   }
 ) {
@@ -177,14 +185,14 @@ for my $test_set (
 }
 
 {
-my $subq = $s->resultset('Owners')->search({
+my $subq = $schema->resultset('Owners')->search({
    'count.id' => { -ident => 'owner.id' },
 }, { alias => 'owner' })->count_rs;
 
-my $rs_selectas_rel = $s->resultset('BooksInLibrary')->search ({}, {
+my $rs_selectas_rel = $schema->resultset('BooksInLibrary')->search ({}, {
   columns => [
      { owner_name => 'owner.name' },
-     { owner_books => $subq->as_query },
+     { owner_books => { '' => $subq->as_query, -as => 'owner_books' } },
   ],
   join => 'owner',
   rows => 2,
@@ -194,23 +202,23 @@ my $rs_selectas_rel = $s->resultset('BooksInLibrary')->search ({}, {
 is_same_sql_bind(
   $rs_selectas_rel->as_query,
   '(
-    SELECT owner_name, owner_books
+    SELECT owner.name, owner_books
       FROM (
-        SELECT owner_name, owner_books, ROWNUM rownum__index
+        SELECT owner.name, owner_books, ROWNUM AS rownum__index
           FROM (
-            SELECT  owner.name AS owner_name,
+            SELECT  owner.name,
               ( SELECT COUNT( * ) FROM owners owner WHERE (count.id = owner.id)) AS owner_books
               FROM books me
               JOIN owners owner ON owner.id = me.owner
             WHERE ( source = ? )
-          ) me
-      ) me
+          ) owner
+      ) owner
     WHERE rownum__index BETWEEN ? AND ?
   )',
   [
     [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' }
       => 'Library' ],
-    [ $OFFSET => 4 ],
+    [ $TOTAL => 4 ],
     [ $TOTAL => 5 ],
   ],
 
@@ -220,7 +228,7 @@ is_same_sql_bind(
 }
 
 {
-  $rs = $s->resultset('Artist')->search({}, {
+  $rs = $schema->resultset('Artist')->search({}, {
     columns => 'name',
     offset => 1,
     order_by => 'name',
@@ -235,17 +243,17 @@ is_same_sql_bind(
 }
 
 {
-my $subq = $s->resultset('Owners')->search({
+my $subq = $schema->resultset('Owners')->search({
    'books.owner' => { -ident => 'owner.id' },
 }, { alias => 'owner', select => ['id'] } )->count_rs;
 
-my $rs_selectas_rel = $s->resultset('BooksInLibrary')->search( { -exists => $subq->as_query }, { select => ['id','owner'], rows => 1 } );
+my $rs_selectas_rel = $schema->resultset('BooksInLibrary')->search( { -exists => $subq->as_query }, { select => ['id','owner'], rows => 1 } );
 
 is_same_sql_bind(
   $rs_selectas_rel->as_query,
   '(
     SELECT me.id, me.owner FROM (
-      SELECT me.id, me.owner  FROM books me WHERE ( ( (EXISTS (SELECT COUNT( * ) FROM owners owner WHERE ( books.owner = owner.id ))) AND source = ? ) )
+      SELECT me.id, me.owner  FROM books me WHERE ( ( EXISTS (SELECT COUNT( * ) FROM owners owner WHERE ( books.owner = owner.id )) AND source = ? ) )
     ) me
     WHERE ROWNUM <= ?
   )',
