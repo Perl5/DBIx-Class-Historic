@@ -15,7 +15,12 @@ my ($ROWS, $TOTAL, $OFFSET) = (
 
 my $schema = DBICTest->init_schema;
 
-$schema->storage->_sql_maker->limit_dialect ('GenericSubQ');
+$schema->storage->_sql_maker->renderer_class(
+  Moo::Role->create_class_with_roles(qw(
+    Data::Query::Renderer::SQL::Naive
+    Data::Query::Renderer::SQL::Slice::GenericSubquery
+  ))
+);
 
 my $rs = $schema->resultset ('BooksInLibrary')->search ({}, {
   '+columns' => [{ owner_name => 'owner.name' }],
@@ -28,10 +33,10 @@ is_same_sql_bind(
   $rs->as_query,
   '(
     SELECT  me.id, me.source, me.owner, me.title, me.price,
-            owner_name
+            owner__name
       FROM (
         SELECT  me.id, me.source, me.owner, me.title, me.price,
-                owner.name AS owner_name
+             owner.name AS owner__name
           FROM books me
           JOIN owners owner ON owner.id = me.owner
         WHERE ( source = ? )
@@ -112,9 +117,9 @@ $rs = $schema->resultset ('BooksInLibrary')->search ({}, {
 is_same_sql_bind(
   $rs->as_query,
   '(
-    SELECT "owner_name"
+    SELECT "owner__name"
       FROM (
-        SELECT "owner"."name" AS "owner_name", "title"
+        SELECT "owner"."name" AS "owner__name", "title"
           FROM "books" "me"
           JOIN "owners" "owner" ON "owner"."id" = "me"."owner"
         WHERE ( "source" = ? )
