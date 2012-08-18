@@ -80,7 +80,7 @@ is_same_sql_bind(
             "owner__name"
       FROM (
         SELECT  "me"."id", "me"."source", "me"."owner", "me"."title", "me"."price",
-                "owner"."name" AS "owner__name"
+                "owner"."name" AS "owner__name", "title" AS "ORDER__BY__001"
           FROM "books" "me"
           JOIN "owners" "owner" ON "owner"."id" = "me"."owner"
         WHERE ( "source" = ? )
@@ -89,9 +89,9 @@ is_same_sql_bind(
       (
         SELECT COUNT(*)
           FROM "books" "rownum__emulation"
-        WHERE "rownum__emulation"."title" > "me"."title"
+        WHERE "rownum__emulation"."title" > "ORDER__BY__001"
       ) BETWEEN ? AND ?
-    ORDER BY "title" DESC
+    ORDER BY "ORDER__BY__001" DESC
   )',
   [
     [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' } => 'Library' ],
@@ -117,20 +117,20 @@ $rs = $schema->resultset ('BooksInLibrary')->search ({}, {
 is_same_sql_bind(
   $rs->as_query,
   '(
-    SELECT "owner__name"
+    SELECT "owner"."name"
       FROM (
-        SELECT "owner"."name" AS "owner__name", "title"
+        SELECT "owner"."name", "title" AS "ORDER__BY__001"
           FROM "books" "me"
           JOIN "owners" "owner" ON "owner"."id" = "me"."owner"
         WHERE ( "source" = ? )
-      ) "me"
+      ) "owner"
     WHERE
       (
         SELECT COUNT(*)
           FROM "books" "rownum__emulation"
-        WHERE "rownum__emulation"."title" < "me"."title"
+        WHERE "rownum__emulation"."title" < "ORDER__BY__001"
       ) BETWEEN ? AND ?
-    ORDER BY "title"
+    ORDER BY "ORDER__BY__001"
   )',
   [
     [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' } => 'Library' ],
