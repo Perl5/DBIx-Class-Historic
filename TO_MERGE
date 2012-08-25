@@ -2,3 +2,9 @@ I would propose that in fact this branch shouldn't test DBIC_TRACE - but
 in order to be able to warn on redefinition of relationships we need to add
 a '+foo' form for relationships. Possibly an env var to squelch the warning
 until somebody can redo their code?
+
+The warning is spurious as indicated in the RT ticket. Caelum said he will
+fix it and never did anything.
+https://rt.cpan.org/Public/Bug/Display.html?id=73876#txn-1020866
+This conceptually is not a DBIC problem
+
