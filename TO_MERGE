@@ -1,0 +1,4 @@
+I would propose that in fact this branch shouldn't test DBIC_TRACE - but
+in order to be able to warn on redefinition of relationships we need to add
+a '+foo' form for relationships. Possibly an env var to squelch the warning
+until somebody can redo their code?
