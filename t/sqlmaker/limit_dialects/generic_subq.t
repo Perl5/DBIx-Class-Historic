@@ -167,7 +167,7 @@ my $rs_selectas_rel = $schema->resultset('BooksInLibrary')->search(undef, {
   columns => 'me.id',
   offset => 3,
   rows => 4,
-  '+columns' => { bar => \['? * ?', [ $attr => 11 ], [ $attr => 12 ]], baz => \[ '?', [ $attr => 13 ]] },
+  '+columns' => { bar => { '' => \['? * ?', [ $attr => 11 ], [ $attr => 12 ]], -as => 'bar' }, baz => { '' => \[ '?', [ $attr => 13 ]], -as => 'baz' } },
   order_by => [ 'id', \['? / ?', [ $attr => 1 ], [ $attr => 2 ]], \[ '?', [ $attr => 3 ]] ],
   having => \[ '?', [ $attr => 21 ] ],
 });
@@ -177,21 +177,21 @@ is_same_sql_bind(
   '(
     SELECT "me"."id", "bar", "baz"
       FROM (
-        SELECT "me"."id", ? * ? AS "bar", ? AS "baz"
+        SELECT "me"."id", ? * ? AS "bar", ? AS "baz", "id" AS "ORDER__BY__001", ? / ? AS "ORDER__BY__002", ? AS "ORDER__BY__003"
           FROM "books" "me"
         WHERE ( "source" = ? )
         HAVING ?
       ) "me"
-    WHERE ( SELECT COUNT(*) FROM "books" "rownum__emulation" WHERE "rownum__emulation"."id" < "me"."id" ) BETWEEN ? AND ?
-    ORDER BY "id", ? / ?, ?
+    WHERE ( SELECT COUNT(*) FROM "books" "rownum__emulation" WHERE "rownum__emulation"."id" < "ORDER__BY__001" ) BETWEEN ? AND ?
+    ORDER BY "ORDER__BY__001", "ORDER__BY__002", "ORDER__BY__003"
   )',
   [
     [ $attr => 11 ], [ $attr => 12 ], [ $attr => 13 ],
+    [ $attr => 1 ], [ $attr => 2 ], [ $attr => 3 ],
     [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' } => 'Library' ],
     [ $attr => 21 ],
     [ {%$OFFSET} => 3 ],
     [ {%$TOTAL} => 6 ],
-    [ $attr => 1 ], [ $attr => 2 ], [ $attr => 3 ],
   ],
   'Pagination with sub-query in ORDER BY works'
 );
