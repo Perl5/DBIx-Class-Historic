@@ -1,3 +1,10 @@
+=======
+To clarify comments below - mst originally misread the point of the branch
+There seems to be agreement that this branch should be marked as rejected,
+and deleted when RT#73876 is resolved (which is a DBIC::SL issue, and the
+ticket has been moved the the appropriate queue a while ago)
+=======
+
 I would propose that in fact this branch shouldn't test DBIC_TRACE - but
 in order to be able to warn on redefinition of relationships we need to add
 a '+foo' form for relationships. Possibly an env var to squelch the warning
