@@ -1,0 +1,16 @@
+21:15 <@mst> Caelum: the parse_via branch is completely incoherent
+21:15 <@mst> Caelum: write up a specification that explains what you're trying 
+             to achieve
+21:15 <@mst> Caelum: and then we can discuss an implementation that'll be 
+             acceptable
+21:16 < Caelum> mst: it sems coherent enough to me, what specifically?
+21:17 < Caelum> I wrote this stuff like 2 years ago
+21:18 <@mst> well, it ain't merging; scaffolding calsses on the fly like that 
+             doesn't make any sense
+21:19 <@mst> having multiple Strptime objects, sure
+21:19 <@mst> having a single class that delegates to them, maybe
+21:19 <@mst> but "generating a datetime parser class" is not the job of a 
+             storage
+
+Branch dead, left for informational purposes pending Caelum writing a spec
+from which we can design a usable implementation.
