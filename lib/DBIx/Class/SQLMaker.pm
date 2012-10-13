@@ -41,13 +41,25 @@ use base qw/
 /;
 use mro 'c3';
 
+use Module::Runtime qw(use_module);
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
 use DBIx::Class::Exception;
 use Moo;
 use namespace::clean;
 
-has limit_dialect => (is => 'rw', trigger => sub { shift->clear_renderer });
+has limit_dialect => (
+  is => 'rw', default => sub { 'LimitOffset' },
+  trigger => sub { shift->clear_renderer_class }
+);
+
+around _build_renderer_class => sub {
+  my ($orig, $self) = (shift, shift);
+  use_module('Moo::Role')->create_class_with_roles(
+    $self->$orig(@_),
+    'Data::Query::Renderer::SQL::Slice::'.$self->limit_dialect
+  );
+};
 
 has limit_requires_order_by_stability_check
   => (is => 'rw', default => sub { 0 });

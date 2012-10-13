@@ -16,12 +16,7 @@ my ($TOTAL, $OFFSET, $ROWS) = (
 
 my $schema = DBICTest->init_schema;
 
-$schema->storage->_sql_maker->renderer_class(
-  Moo::Role->create_class_with_roles(qw(
-    Data::Query::Renderer::SQL::Naive
-    Data::Query::Renderer::SQL::Slice::RowNum
-  ))
-);
+$schema->storage->_sql_maker->limit_dialect('RowNum');
 
 $schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
 

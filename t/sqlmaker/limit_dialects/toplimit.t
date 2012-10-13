@@ -11,12 +11,7 @@ my $schema = DBICTest->init_schema;
 # Trick the sqlite DB to use Top limit emulation
 # We could test all of this via $sq->$op directly,
 # but some conditions need a $rsrc
-$schema->storage->_sql_maker->renderer_class(
-  Moo::Role->create_class_with_roles(qw(
-    Data::Query::Renderer::SQL::Naive
-    Data::Query::Renderer::SQL::Slice::Top
-  ))
-);
+$schema->storage->_sql_maker->limit_dialect('Top');
 $schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
 $schema->storage->_sql_maker->limit_enforces_order_by_stability(1);
 

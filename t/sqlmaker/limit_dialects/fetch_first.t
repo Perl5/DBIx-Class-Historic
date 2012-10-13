@@ -10,12 +10,7 @@ my $schema = DBICTest->init_schema;
 
 # based on toplimit.t
 delete $schema->storage->_sql_maker->{_cached_syntax};
-$schema->storage->_sql_maker->renderer_class(
-  Moo::Role->create_class_with_roles(qw(
-    Data::Query::Renderer::SQL::Naive
-    Data::Query::Renderer::SQL::Slice::FetchFirst
-  ))
-);
+$schema->storage->_sql_maker->limit_dialect('FetchFirst');
 $schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
 $schema->storage->_sql_maker->limit_enforces_order_by_stability(1);
 

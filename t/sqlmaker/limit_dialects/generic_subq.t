@@ -15,12 +15,7 @@ my ($ROWS, $TOTAL, $OFFSET) = (
 
 my $schema = DBICTest->init_schema;
 
-$schema->storage->_sql_maker->renderer_class(
-  Moo::Role->create_class_with_roles(qw(
-    Data::Query::Renderer::SQL::Naive
-    Data::Query::Renderer::SQL::Slice::GenericSubquery
-  ))
-);
+$schema->storage->_sql_maker->limit_dialect('GenericSubquery');
 
 my $rs = $schema->resultset ('BooksInLibrary')->search ({}, {
   '+columns' => [{ owner_name => 'owner.name' }],
