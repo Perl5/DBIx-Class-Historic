@@ -61,12 +61,6 @@ around _build_renderer_class => sub {
   );
 };
 
-has limit_requires_order_by_stability_check
-  => (is => 'rw', default => sub { 0 });
-
-has limit_enforces_order_by_stability
-  => (is => 'rw', default => sub { 0 });
-
 # for when I need a normalized l/r pair
 sub _quote_chars {
   map
@@ -151,7 +145,11 @@ sub select {
 
   my %final_attrs = (%{$rs_attrs||{}}, limit => $limit, offset => $offset);
 
-  if ($offset and $self->limit_requires_order_by_stability_check) {
+  my %slice_stability = $self->renderer->slice_stability;
+
+  my $stability = $slice_stability{$offset ? 'offset' : 'limit'};
+
+  if ($stability) {
     my $source = $rs_attrs->{_rsroot_rsrc};
     unless (
       $final_attrs{order_is_stable}
@@ -161,7 +159,7 @@ sub select {
                    @final_attrs{qw(from order_by where)}
                  )
     ) {
-      if ($self->limit_enforces_order_by_stability) {
+      if ($stability eq 'requires') {
         if ($self->converter->_order_by_to_dq($final_attrs{order_by})) {
           $self->throw_exception(
             'Current limit/offset implementation requires a stable order for offset'

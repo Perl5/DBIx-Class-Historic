@@ -12,8 +12,6 @@ my $schema = DBICTest->init_schema;
 # We could test all of this via $sq->$op directly,
 # but some conditions need a $rsrc
 $schema->storage->_sql_maker->limit_dialect('Top');
-$schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
-$schema->storage->_sql_maker->limit_enforces_order_by_stability(1);
 
 my $books_45_and_owners = $schema->resultset ('BooksInLibrary')->search ({}, {
   prefetch => 'owner', rows => 2, offset => 3,

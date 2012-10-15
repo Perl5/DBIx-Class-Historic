@@ -18,8 +18,6 @@ my $schema = DBICTest->init_schema;
 
 $schema->storage->_sql_maker->limit_dialect('RowNum');
 
-$schema->storage->_sql_maker->limit_requires_order_by_stability_check(1);
-
 my $rs = $schema->resultset ('CD')->search({ id => 1 });
 
 my $where_bind = [ { dbic_colname => 'id' }, 1 ];
