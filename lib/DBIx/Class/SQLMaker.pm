@@ -53,9 +53,9 @@ has limit_dialect => (
   trigger => sub { shift->clear_renderer_class }
 );
 
-around _build_renderer_class => sub {
+around _build_renderer_roles => sub {
   my ($orig, $self) = (shift, shift);
-  use_module('Moo::Role')->create_class_with_roles(
+  return (
     $self->$orig(@_),
     'Data::Query::Renderer::SQL::Slice::'.$self->limit_dialect
   );
