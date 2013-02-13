@@ -92,6 +92,17 @@ sub _resolve_prefetch {
 # In any case - the output of this thing is meticulously micro-tested, so
 # any sort of adjustment/rewrite should be relatively easy (fsvo relatively)
 #
+
+# tryout an *exceedingly* naive memoizer (not much gain in preliminary benchmarks ...)
+#
+use Memoize 'memoize';
+use Storable 'nfreeze';
+use Sub::Name 'subname';
+memoize('_mk_row_parser',
+  NORMALIZER => sub { ref($_[0]) .nfreeze ($_[1]) },
+);
+subname ( _mk_row_parser => \&_mk_row_parser );
+
 sub _mk_row_parser {
   # $args and $attrs are separated to delineate what is core collapser stuff and
   # what is dbic $rs specific
