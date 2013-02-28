@@ -702,6 +702,18 @@ is_same_src (
   'Multiple has_many on multiple branches with underdefined root, HRI-direct torture test',
 );
 
+use B::Terse;
+my $w = B::Terse::compile(
+  $schema->source ('CD')->_mk_row_parser({
+    eval => 1,
+    inflate_map => $infmap,
+    collapse => 1,
+  }),
+);
+
+$w->();
+
+
 done_testing;
 
 my $deparser;
