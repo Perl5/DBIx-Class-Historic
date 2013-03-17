@@ -42,7 +42,10 @@ around _insert_to_dq => sub {
       local $SQL::Abstract::Converter::Cur_Col_Meta = (
         is_Identifier($r_dq)
           ? join('.', @{$r_dq->{elements}})
-          : undef
+          : ((is_Literal($r_dq) and !ref($r_dq->{literal})
+               and $r_dq->{literal} =~ /^\w+$/)
+              ? $r_dq->{literal}
+              : undef)
       );
       $self->_value_to_dq(\($options->{returning_container}[$_]));
     } 0..$ret_count-1
