@@ -1,5 +1,6 @@
 package DBIx::Class::SQLMaker::Converter::Oracle;
 
+use Data::Query::ExprHelpers;
 use Moo;
 
 extends 'DBIx::Class::SQLMaker::Converter';
@@ -25,6 +26,28 @@ around _apply_to_dq => sub {
   } else {
     return $self->$orig(@_);
   }
+};
+
+around _insert_to_dq => sub {
+  my ($orig, $self) = (shift, shift);
+  my (undef, undef, $options) = @_;
+  my $dq = $self->$orig(@_);
+  my $ret_count = @{$dq->{returning}};
+  @{$options->{returning_container}} = (undef) x $ret_count;
+  my $into = [
+    map {
+      my $r_dq = $dq->{returning}[$_];
+      no warnings 'once';
+::Dwarn($r_dq);
+      local $SQL::Abstract::Converter::Cur_Col_Meta = (
+        is_Identifier($r_dq)
+          ? join('.', @{$r_dq->{elements}})
+          : undef
+      );
+      $self->_value_to_dq(\($options->{returning_container}[$_]));
+    } 0..$ret_count-1
+  ];
+  +{ %$dq, 'Data::Query::Renderer::SQL::Dialect::ReturnInto.into' => $into };
 };
 
 1;

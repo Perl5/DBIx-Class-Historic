@@ -20,6 +20,7 @@ around _build_renderer_roles => sub {
   my ($orig, $self) = (shift, shift);
   (
     'Data::Query::Renderer::SQL::Extension::ConnectBy',
+    'Data::Query::Renderer::SQL::Dialect::ReturnInto',
     $self->$orig(@_),
   );
 };
