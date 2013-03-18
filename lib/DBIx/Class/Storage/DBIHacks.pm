@@ -653,10 +653,10 @@ sub _order_by_is_stable {
   my $conv = $self->sqla_converter;
 
   $self->_scan_identifiers(
-    sub { push @ident_dq, $_[0] }, $conv->_order_by_to_dq($order_by)
+    sub { push @ident_dq, $_[0] }, my $order_dq = $conv->_order_by_to_dq($order_by)
   );
 
-  return unless @ident_dq;
+  return unless $order_dq;
 
   if ($where) {
     # old _extract_fixed_condition_columns logic
