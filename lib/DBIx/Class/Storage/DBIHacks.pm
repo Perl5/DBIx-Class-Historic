@@ -656,6 +656,8 @@ sub _order_by_is_stable {
     sub { push @ident_dq, $_[0] }, $conv->_order_by_to_dq($order_by)
   );
 
+  return unless @ident_dq;
+
   if ($where) {
     # old _extract_fixed_condition_columns logic
     $self->_scan_nodes({
