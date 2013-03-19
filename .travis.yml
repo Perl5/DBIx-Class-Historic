@@ -1,0 +1,6 @@
+# Dummy to disable smoking for the time being
+#
+
+branches:
+  only:
+    - master
