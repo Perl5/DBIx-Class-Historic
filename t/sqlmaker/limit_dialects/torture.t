@@ -332,7 +332,7 @@ my $tests = {
         '(
           SELECT me.id, owner__id, owner__name, bar, baz
             FROM (
-              SELECT me.id, owner__id, owner__name, bar, baz, ROWNUM rownum__index
+              SELECT me.id, owner__id, owner__name, bar, baz, ROWNUM AS rownum__index
                 FROM (
                   SELECT me.id, owner.id AS owner__id, owner.name AS owner__name, ? * ? AS bar, ? AS baz
                     FROM books me
@@ -368,7 +368,7 @@ my $tests = {
         '(
           SELECT me.id, owner__id, owner__name, bar, baz
             FROM (
-              SELECT me.id, owner__id, owner__name, bar, baz, ROWNUM rownum__index
+              SELECT me.id, owner__id, owner__name, bar, baz, ROWNUM AS rownum__index
                 FROM (
                   SELECT me.id, owner.id AS owner__id, owner.name AS owner__name, ? * ? AS bar, ? AS baz
                     FROM books me
@@ -399,7 +399,7 @@ my $tests = {
             FROM (
               SELECT me.name, me.id
                 FROM (
-                  SELECT me.name, me.id, ROWNUM rownum__index
+                  SELECT me.name, me.id, ROWNUM AS rownum__index
                     FROM (
                       SELECT me.name, me.id
                         FROM owners me
@@ -776,7 +776,9 @@ my $tests = {
 
 for my $limtype (sort keys %$tests) {
 
-  Test::Builder->new->is_passing or exit;
+  #Test::Builder->new->is_passing or exit;
+
+my $r = eval {
 
   delete $schema->storage->_sql_maker->{_cached_syntax};
   $schema->storage->_sql_maker->limit_dialect ($limtype);
@@ -848,6 +850,9 @@ for my $limtype (sort keys %$tests) {
     lives_ok { is ($pref_rs->all, 1, 'Expected count of objects on limtied prefetch') }
       "Complex limited prefetch works with supported limit $limtype"
   }
+  1;
+};
+fail("Died: $@") unless $r;
 }
 
 done_testing;
