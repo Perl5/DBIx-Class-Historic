@@ -147,9 +147,7 @@ sub select {
 
   my %slice_stability = $self->renderer->slice_stability;
 
-  my $stability = $slice_stability{$offset ? 'offset' : 'limit'};
-
-  if ($stability) {
+  if (my $stability = $slice_stability{$offset ? 'offset' : 'limit'}) {
     my $source = $rs_attrs->{_rsroot_rsrc};
     unless (
       $final_attrs{order_is_stable}
@@ -178,6 +176,20 @@ limit '
         }
       }
     }
+
+  }
+
+  my %slice_subquery = $self->renderer->slice_subquery;
+
+  if (my $subquery = $slice_subquery{$offset ? 'offset' : 'limit'}) {
+    $fields = [ map {
+      my $f = $fields->[$_];
+      if (ref $f) {
+        $f = { '' => $f } unless ref($f) eq 'HASH';
+        $f->{-as} ||= $final_attrs{as}[$_];
+      }
+      $f;
+    } 0 .. $#$fields ];
   }
 
   my ($sql, @bind) = $self->next::method ($table, $fields, $where, $final_attrs{order_by}, \%final_attrs );
