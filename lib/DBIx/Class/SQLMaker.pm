@@ -215,32 +215,6 @@ sub _lock_select {
   return " $sql";
 }
 
-# Handle default inserts
-sub insert {
-# optimized due to hotttnesss
-#  my ($self, $table, $data, $options) = @_;
-
-  # SQLA will emit INSERT INTO $table ( ) VALUES ( )
-  # which is sadly understood only by MySQL. Change default behavior here,
-  # until SQLA2 comes with proper dialect support
-  if (! $_[2] or (ref $_[2] eq 'HASH' and !keys %{$_[2]} ) ) {
-    my @bind;
-    my $sql = sprintf(
-      'INSERT INTO %s DEFAULT VALUES', $_[0]->_quote($_[1])
-    );
-
-    if ( ($_[3]||{})->{returning} ) {
-      my $s;
-      ($s, @bind) = $_[0]->_insert_returning ($_[3]);
-      $sql .= $s;
-    }
-
-    return ($sql, @bind);
-  }
-
-  next::method(@_);
-}
-
 sub _recurse_from {
   scalar shift->_render_sqla(table => \@_);
 }

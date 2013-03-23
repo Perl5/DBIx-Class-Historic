@@ -3,19 +3,8 @@ package # Hide from PAUSE
 
 use base qw( DBIx::Class::SQLMaker );
 
-#
-# MySQL does not understand the standard INSERT INTO $table DEFAULT VALUES
-# Adjust SQL here instead
-#
-sub insert {
-  my $self = shift;
-
-  if (! $_[1] or (ref $_[1] eq 'HASH' and !keys %{$_[1]} ) ) {
-    my $table = $self->_quote($_[0]);
-    return "INSERT INTO ${table} () VALUES ()"
-  }
-
-  return $self->next::method (@_);
+sub _build_base_renderer_class {
+  Module::Runtime::use_module('Data::Query::Renderer::SQL::MySQL');
 }
 
 # Allow STRAIGHT_JOIN's
