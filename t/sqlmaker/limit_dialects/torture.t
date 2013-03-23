@@ -691,7 +691,7 @@ my $tests = {
     ],
   },
 
-  GenericSubQ => {
+  GenericSubquery => {
     limit => [
       '(
         SELECT me.id, owner__id, owner__name, bar, baz
@@ -791,7 +791,7 @@ my $r = eval {
     '+columns' => { bar => \['? * ?', [ $attr => 11 ], [ $attr => 12 ]], baz => \[ '?', [ $attr => 13 ]] },
     group_by => \[ 'avg(me.id / ?)', [ $attr => 21 ] ],
     having => \[ '?', [ $attr => 31 ] ],
-    ($limtype =~ /GenericSubQ/ ? ( order_by => 'me.id' ) : () ),  # needs a simple-column stable order to be happy
+    ($limtype =~ /GenericSubquery/ ? ( order_by => 'me.id' ) : () ),  # needs a simple-column stable order to be happy
   });
 
   #
@@ -836,7 +836,7 @@ my $r = eval {
     offset => 1,
     columns => 'name',  # only the owner name, still prefetch all the books
     prefetch => 'books',
-    ($limtype =~ /GenericSubQ/ ? ( order_by => 'me.id' ) : () ),  # needs a simple-column stable order to be happy
+    ($limtype =~ /GenericSubquery/ ? ( order_by => 'me.id' ) : () ),  # needs a simple-column stable order to be happy
   });
 
   is_same_sql_bind (
@@ -846,7 +846,7 @@ my $r = eval {
   ) if $tests->{$limtype}{limit_offset_prefetch};
 
   # we can actually run the query
-  if ($limtype eq $native_limit_dialect or $limtype eq 'GenericSubQ') {
+  if ($limtype eq $native_limit_dialect or $limtype eq 'GenericSubquery') {
     lives_ok { is ($pref_rs->all, 1, 'Expected count of objects on limtied prefetch') }
       "Complex limited prefetch works with supported limit $limtype"
   }

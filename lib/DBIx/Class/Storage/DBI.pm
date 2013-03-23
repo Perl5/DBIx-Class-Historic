@@ -954,12 +954,12 @@ sub sql_maker {
         carp (
           "Your storage class ($s_class) does not set sql_limit_dialect and you "
         . 'have not supplied an explicit limit_dialect in your connection_info. '
-        . 'DBIC will attempt to use the GenericSubQ dialect, which works on most '
+        . 'DBIC will attempt to use the GenericSubquery dialect, which works on most '
         . 'databases but can be (and often is) painfully slow. '
         . "Please file an RT ticket against '$s_class' ."
         );
 
-        'GenericSubQ';
+        'GenericSubquery';
       }
     ;
 
