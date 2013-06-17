@@ -22,6 +22,7 @@ sub map_descending (&;@) {
 
 use Data::Query::ExprHelpers;
 use Moo;
+use namespace::clean;
 
 extends 'Data::Query::Renderer::SQL::Naive';
 

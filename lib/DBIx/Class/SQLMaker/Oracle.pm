@@ -3,6 +3,7 @@ package # Hide from PAUSE
 
 use Module::Runtime ();
 use Moo;
+use namespace::clean;
 
 extends 'DBIx::Class::SQLMaker';
 

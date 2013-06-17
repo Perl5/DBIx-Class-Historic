@@ -1,6 +1,7 @@
 package DBIx::Class::SQLMaker::Renderer::Access;
 
 use Moo;
+use namespace::clean;
 
 extends 'Data::Query::Renderer::SQL::Naive';
 

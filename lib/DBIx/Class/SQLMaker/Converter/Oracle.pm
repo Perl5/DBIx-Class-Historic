@@ -2,6 +2,7 @@ package DBIx::Class::SQLMaker::Converter::Oracle;
 
 use Data::Query::ExprHelpers;
 use Moo;
+use namespace::clean;
 
 extends 'DBIx::Class::SQLMaker::Converter';
 
