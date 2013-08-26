@@ -17,6 +17,11 @@ BEGIN {
   *CORE::GLOBAL::bless = sub { goto $bless_override };
 }
 
+BEGIN {
+  local $0 = 'blah';
+  require Class::Accessor::Grouped;
+}
+
 use strict;
 use warnings;
 use Test::More;
@@ -47,7 +52,7 @@ if ($ENV{DBICTEST_IN_PERSISTENT_ENV}) {
 
 use lib qw(t/lib);
 use DBICTest::RunMode;
-use DBICTest::Util::LeakTracer qw/populate_weakregistry assert_empty_weakregistry/;
+use DBICTest::Util::LeakTracer qw(populate_weakregistry assert_empty_weakregistry run_and_populate_weakregistry);
 use Scalar::Util 'refaddr';
 use DBIx::Class;
 BEGIN {
@@ -116,8 +121,9 @@ unless (DBICTest::RunMode->is_plain) {
   %$weak_registry = ();
 }
 
-{
-  use_ok ('DBICTest');
+my $worker = sub {
+  require DBICTest;
+  DBICTest->import;
 
   my $schema = DBICTest->init_schema;
   my $rs = $schema->resultset ('Artist');
@@ -315,11 +321,11 @@ unless (DBICTest::RunMode->is_plain) {
 
   populate_weakregistry ($weak_registry, $base_collection->{$_}, "basic $_")
     for keys %$base_collection;
-}
 
-# check that "phantom-chaining" works - we never lose track of the original $schema
-# and have access to the entire tree without leaking anything
-{
+
+
+  # check that "phantom-chaining" works - we never lose track of the original $schema
+  # and have access to the entire tree without leaking anything
   my $phantom;
   for (
     sub { DBICTest->init_schema( sqlite_use_file => 0 ) },
@@ -351,6 +357,33 @@ unless (DBICTest::RunMode->is_plain) {
 
   ok( $phantom->in_storage, 'Properly deleted/reinserted' );
   is( $phantom->name, 'reattached', 'Still correct name' );
+};
+
+# intial run
+$worker->();
+
+{
+  my $first_run_reg;
+  for (@{[]}) {
+    run_and_populate_weakregistry( \&$worker, my $reg = {} );
+
+    if ($first_run_reg) {
+      for (keys %$reg) {
+        delete $reg->{$_} if (
+          defined $reg->{$_}{weakref}
+            and
+          defined $first_run_reg->{$_}{weakref}
+            and
+          refaddr($reg->{$_}{weakref}) == refaddr($first_run_reg->{$_}{weakref})
+        );
+      }
+
+      assert_empty_weakregistry($reg);
+    }
+    else {
+      $first_run_reg = $reg;
+    }
+  }
 }
 
 # Naturally we have some exceptions
