@@ -145,51 +145,53 @@ sub select {
 
   my %final_attrs = (%{$rs_attrs||{}}, limit => $limit, offset => $offset);
 
-  my %slice_stability = $self->renderer->slice_stability;
+  if ($limit or $offset) {
+    my %slice_stability = $self->renderer->slice_stability;
 
-  if (my $stability = $slice_stability{$offset ? 'offset' : 'limit'}) {
-    my $source = $rs_attrs->{_rsroot_rsrc};
-    unless (
-      $final_attrs{order_is_stable}
-      = $final_attrs{preserve_order}
-      = $source->schema->storage
-               ->_order_by_is_stable(
-                   @final_attrs{qw(from order_by where)}
-                 )
-    ) {
-      if ($stability eq 'requires') {
-        if ($self->converter->_order_by_to_dq($final_attrs{order_by})) {
-          $self->throw_exception(
-            $self->limit_dialect.' limit/offset implementation requires a stable order for offset'
-          );
-        }
-        if (my $ident_cols = $source->_identifying_column_set) {
-          $final_attrs{order_by} = [
-            map "$final_attrs{alias}.$_", @$ident_cols
-          ];
-          $final_attrs{order_is_stable} = 1;
-        } else {
-          $self->throw_exception(sprintf(
-            'Unable to auto-construct stable order criteria for "skimming type" 
-limit '
-          . "dialect based on source '%s'", $source->name) );
+    if (my $stability = $slice_stability{$offset ? 'offset' : 'limit'}) {
+      my $source = $rs_attrs->{_rsroot_rsrc};
+      unless (
+        $final_attrs{order_is_stable}
+        = $final_attrs{preserve_order}
+        = $source->schema->storage
+                 ->_order_by_is_stable(
+                     @final_attrs{qw(from order_by where)}
+                   )
+      ) {
+        if ($stability eq 'requires') {
+          if ($self->converter->_order_by_to_dq($final_attrs{order_by})) {
+            $self->throw_exception(
+                $self->limit_dialect.' limit/offset implementation requires a stable order for offset'
+            );
+          }
+          if (my $ident_cols = $source->_identifying_column_set) {
+            $final_attrs{order_by} = [
+                map "$final_attrs{alias}.$_", @$ident_cols
+            ];
+            $final_attrs{order_is_stable} = 1;
+          } else {
+            $self->throw_exception(sprintf(
+              'Unable to auto-construct stable order criteria for "skimming type" 
+  limit '
+              . "dialect based on source '%s'", $source->name) );
+          }
         }
       }
+
     }
 
-  }
+    my %slice_subquery = $self->renderer->slice_subquery;
 
-  my %slice_subquery = $self->renderer->slice_subquery;
-
-  if (my $subquery = $slice_subquery{$offset ? 'offset' : 'limit'}) {
-    $fields = [ map {
-      my $f = $fields->[$_];
-      if (ref $f) {
-        $f = { '' => $f } unless ref($f) eq 'HASH';
-        $f->{-as} ||= $final_attrs{as}[$_];
-      }
-      $f;
-    } 0 .. $#$fields ];
+    if (my $subquery = $slice_subquery{$offset ? 'offset' : 'limit'}) {
+      $fields = [ map {
+        my $f = $fields->[$_];
+        if (ref $f) {
+          $f = { '' => $f } unless ref($f) eq 'HASH';
+          $f->{-as} ||= $final_attrs{as}[$_];
+        }
+        $f;
+        } 0 .. $#$fields ];
+    }
   }
 
   my ($sql, @bind) = $self->next::method ($table, $fields, $where, $final_attrs{order_by}, \%final_attrs );
