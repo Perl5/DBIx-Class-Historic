@@ -53,11 +53,21 @@ has limit_dialect => (
   trigger => sub { shift->clear_renderer_class }
 );
 
+our %LIMIT_DIALECT_MAP = (
+  'GenericSubQ' => 'GenericSubquery'
+);
+
+sub mapped_limit_dialect {
+  my ($self) = @_;
+  my $unmapped = $self->limit_dialect;
+  $LIMIT_DIALECT_MAP{$unmapped}||$unmapped;
+}
+
 around _build_renderer_roles => sub {
   my ($orig, $self) = (shift, shift);
   return (
     $self->$orig(@_),
-    'Data::Query::Renderer::SQL::Slice::'.$self->limit_dialect
+    'Data::Query::Renderer::SQL::Slice::'.$self->mapped_limit_dialect
   );
 };
 
