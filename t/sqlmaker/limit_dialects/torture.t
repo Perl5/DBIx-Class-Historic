@@ -651,7 +651,6 @@ my $tests = {
         WHERE source != ? AND me.title = ? AND source = ?
         GROUP BY avg(me.id / ?)
         HAVING ?
-        ORDER BY me.id
         SET ROWCOUNT 0
       )',
       [
