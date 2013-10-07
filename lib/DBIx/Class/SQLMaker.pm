@@ -54,7 +54,8 @@ has limit_dialect => (
 );
 
 our %LIMIT_DIALECT_MAP = (
-  'GenericSubQ' => 'GenericSubquery'
+  'GenericSubQ' => 'GenericSubquery',
+  'RowCountOrGenericSubQ' => 'RowCountOrGenericSubquery',
 );
 
 sub mapped_limit_dialect {
