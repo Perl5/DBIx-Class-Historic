@@ -197,7 +197,10 @@ sub select {
         my $f = $fields->[$_];
         if (ref $f) {
           $f = { '' => $f } unless ref($f) eq 'HASH';
-          $f->{-as} ||= $final_attrs{as}[$_];
+          ($f->{-as} ||= $final_attrs{as}[$_]) =~ s/\Q${\$self->name_sep}/__/g;
+        } elsif ($f !~ /^\Q$final_attrs{alias}${\$self->name_sep}/) {
+          $f = { '' => $f };
+          ($f->{-as} ||= $final_attrs{as}[$_]) =~ s/\Q${\$self->name_sep}/__/g;
         }
         $f;
         } 0 .. $#$fields ];
