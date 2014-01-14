@@ -14,6 +14,8 @@ use constant {
   SKIP_SCALAR_REFS => ( $] > 5.017 ) ? 1 : 0,
 };
 
+use Devel::MAT::Dumper -max_string => -1;
+
 use base 'Exporter';
 our @EXPORT_OK = qw(populate_weakregistry assert_empty_weakregistry hrefaddr visit_refs);
 
@@ -32,6 +34,9 @@ sub _describe_ref {
   ;
 }
 
+warn "\nPID $$\n";
+
+my ($cycle_cnt, $max, $dumpnext) = (0, 0);
 sub populate_weakregistry {
   my ($weak_registry, $target, $note) = @_;
 
@@ -52,6 +57,8 @@ sub populate_weakregistry {
   for my $reg (values %reg_of_regs) {
     (defined $reg->{$_}{weakref}) or delete $reg->{$_}
       for keys %$reg;
+
+    $max = scalar keys %$reg if $max < scalar keys %$reg;
   }
 
   # FIXME/INVESTIGATE - something fishy is going on with refs to plain
@@ -73,6 +80,25 @@ sub populate_weakregistry {
     $note =~ s/\s*\Q$desc\E\s*//g;
     $weak_registry->{$refaddr}{slot_names}{$note} = 1;
   }
+
+  $max = 0 if $cycle_cnt == 8000;
+  $dumpnext = 1 unless ( ++$cycle_cnt % 100_000 );
+  unless (++$cycle_cnt % 10_000) {
+    if (-f "/proc/$$/stat") {
+      my $proc_stat = do { local (@ARGV, $/) = "/proc/$$/stat"; <> };
+        my ($vsz) = map { $_ / 1024 }
+        (split (/\s+/, $proc_stat))[-22];  # go backwards because the %s of the pr
+
+      printf STDERR "#\n# VSIZE:%dKiB\n", $vsz
+
+    }
+  }
+
+#  if ($dumpnext and ( (scalar keys %$weak_registry) == $max )) {
+#    undef $dumpnext;
+#    Devel::MAT::Dumper::dump( "/tmp/dump_$cycle_cnt" );
+#    exit if $cycle_cnt >= 900_000;
+#  }
 
   $target;
 }

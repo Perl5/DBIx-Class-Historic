@@ -1,0 +1,65 @@
+use strictures;
+use Devel::Dwarn;
+
+use Devel::MAT::Dumpfile;
+
+my ($sv_counts, $svmap, $seentypes, $refholders );
+
+sub ha { sprintf '0x%x', $_[0] }
+
+for my $dmp (qw(dump_200356 dump_300033)) {
+  my $d = Devel::MAT::Dumpfile->load($dmp);
+
+  Ddie [ $d->sv_at( 0x3d1e370 )->values ];
+
+  for my $sv ($d->heap) {
+    next unless $sv->type eq 'SCALAR' and ! grep { defined $sv->$_ } qw(qq_pv pv pvlen iv uv nv ourstash);
+    $sv_counts->{join "\0", map { (defined $sv->$_) ? $sv->$_ :  'UNDEF' } (qw(qq_pv pv pvlen iv uv nv ourstash))}{$dmp}++;
+    $svmap->{$dmp}{ha $sv->addr} = { sv => $sv };
+  }
+
+  for my $sv ($d->heap) {
+    for ( values %{ {$sv->outrefs_strong} } ) {
+      if (my $slot = $svmap->{$dmp}{ha $_->addr}) {
+        push @{$slot->{refs}}, $sv;
+        $slot->{reftypes}{$sv->type}++;
+      }
+    }
+  }
+
+
+
+  for my $addr ( keys %{$svmap->{$dmp}}) {
+    my $slot = $svmap->{$dmp}{$addr};
+    delete $svmap->{$dmp}{$addr} if $slot->{sv}->refcnt != scalar @{ $slot->{refs} || [] };
+
+    my $refsummary = join ":", map { $_ => $slot->{reftypes}{$_} } sort keys %{$slot->{reftypes}};
+
+    if ($refsummary eq 'HASH:1') {
+      $seentypes->{$dmp}{$refsummary}++;
+
+      $refholders->{$dmp}{$slot->{refs}[0]->desc_addr}++;
+    }
+    else {
+      delete $svmap->{$dmp}{$addr};
+    }
+  }
+
+#  for my $reflist (values %{$refmap->{$dmp}}) {
+#    next unless $reflist;
+#    my $cnts;
+#    $cnts->{$_->type}++ for @$reflist;
+#    Ddie $cnts;
+#  }
+
+#  local $Data::Dumper::Maxdepth = 3;
+#  Ddie $refmap;
+}
+
+for (keys %$sv_counts) {
+  my ($l, $r) = values %{$sv_counts->{$_}};
+  delete $sv_counts->{$_} if ( ($l||0) == ($r||0) );
+}
+
+Dwarn [$sv_counts, $seentypes, $refholders ];
+

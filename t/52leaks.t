@@ -332,38 +332,38 @@ unless (DBICTest::RunMode->is_plain) {
 
 # check that "phantom-chaining" works - we never lose track of the original $schema
 # and have access to the entire tree without leaking anything
-{
+while (1) {
   my $phantom;
   for (
-    sub { DBICTest->init_schema( sqlite_use_file => 0 ) },
-    sub { shift->source('Artist') },
-    sub { shift->resultset },
-    sub { shift->result_source },
-    sub { shift->schema },
-    sub { shift->resultset('Artist') },
-    sub { shift->find_or_create({ name => 'detachable' }) },
-    sub { shift->result_source },
-    sub { shift->schema },
-    sub { shift->clone },
-    sub { shift->resultset('CD') },
-    sub { shift->next },
-    sub { shift->artist },
-    sub { shift->search_related('cds') },
-    sub { shift->next },
-    sub { shift->search_related('artist') },
-    sub { shift->result_source },
-    sub { shift->resultset },
-    sub { shift->create({ name => 'detached' }) },
-    sub { shift->update({ name => 'reattached' }) },
-    sub { shift->discard_changes },
-    sub { shift->delete },
-    sub { shift->insert },
+    sub { DBICTest->init_schema( sqlite_use_file => 0, no_deploy => 1 ) },
+#    sub { shift->source('Artist') },
+#    sub { shift->resultset },
+#    sub { shift->result_source },
+#    sub { shift->schema },
+#    sub { shift->resultset('Artist') },
+#    sub { shift->find_or_create({ name => 'detachable' }) },
+#    sub { shift->result_source },
+#    sub { shift->schema },
+#    sub { shift->clone },
+#    sub { shift->resultset('CD') },
+#    sub { shift->next },
+#    sub { shift->artist },
+#    sub { shift->search_related('cds') },
+#    sub { shift->next },
+#    sub { shift->search_related('artist') },
+#    sub { shift->result_source },
+#    sub { shift->resultset },
+#    sub { shift->create({ name => 'detached' }) },
+#    sub { shift->update({ name => 'reattached' }) },
+#    sub { shift->discard_changes },
+#    sub { shift->delete },
+#    sub { shift->insert },
   ) {
     $phantom = populate_weakregistry ( $weak_registry, scalar $_->($phantom) );
   }
 
-  ok( $phantom->in_storage, 'Properly deleted/reinserted' );
-  is( $phantom->name, 'reattached', 'Still correct name' );
+#  ok( $phantom->in_storage, 'Properly deleted/reinserted' );
+#  is( $phantom->name, 'reattached', 'Still correct name' );
 }
 
 # Naturally we have some exceptions
