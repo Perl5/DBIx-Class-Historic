@@ -195,6 +195,13 @@ matrix:
         - CLEANTEST=true
         - BREWVER=blead
 
+    # MAD COW bleadperl with blead CPAN, full depchain test
+    - perl: bleadperl_thr_mb_mad
+      env:
+        - CLEANTEST=true
+        - BREWOPTS="-Duseithreads -Dusemorebits -Dmad -Accflags=-DPERL_DEBUG_READONLY_COW"
+        - BREWVER=blead
+
     # bleadperl with blead CPAN
     - perl: devcpan_bleadperl_thr_mb
       env:
@@ -213,6 +220,7 @@ matrix:
     - perl: devcpan_5.12.2_thr
     - perl: devcpan_5.18.2_thr_mb
     - perl: bleadperl
+    - perl: bleadperl_thr_mb_mad
     - perl: devcpan_bleadperl_thr_mb
 
 
