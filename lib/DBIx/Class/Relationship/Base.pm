@@ -288,12 +288,34 @@ metadata. Currently the supplied coderef is executed as:
 =head3 attributes
 
 The L<standard ResultSet attributes|DBIx::Class::ResultSet/ATTRIBUTES> may
-be used as relationship attributes. In particular, the 'where' attribute is
-useful for filtering relationships:
+be used as relationship attributes. However, the 'where' attribute should
+B<only> be used for adding additional conditions to other tables joined in,
+B<not> the foreign table brought in as a result of the join:
 
-     __PACKAGE__->has_many( 'valid_users', 'MyApp::Schema::User',
+    # WRONG!
+    __PACKAGE__->has_many( 'valid_users', 'MyApp::Schema::User',
         { 'foreign.user_id' => 'self.user_id' },
         { where => { valid => 1 } }
+    );
+
+    # RIGHT!
+    __PACKAGE__->has_many( 'valid_users', 'MyApp::Schema::User',
+        sub {
+            my $self = shift;
+            return +{
+                "$args->{foreign_alias}.user_id" => { -ident => "$args->{self_alias}.user_id" },
+                "$args->{foreign_alias}.valid => 1,
+            }
+        },
+    );
+
+    # proper use of the 'where' clause in a relationship:
+    __PACKAGE__->has_many( 'valid_users', 'MyApp::Schema::User',
+        { 'foreign.user_id' => 'self.user_id' },
+        {
+            join => 'album',
+            where => { 'album.valid' => 1 } },
+        }
     );
 
 The following attributes are also valid:
