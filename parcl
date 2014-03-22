@@ -1,0 +1,90 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+use Devel::Dwarn;
+use Data::Dumper;
+use GraphViz;
+
+=begin
+         my $g = GraphViz->new();
+
+         $g->add_node('London');
+         $g->add_node('Paris', label => 'City of\nlurve');
+         $g->add_node('New York');
+
+         $g->add_edge('London' => 'Paris');
+         $g->add_edge('London' => 'New York', label => 'Far');
+         $g->add_edge('Paris' => 'London');
+
+         print $g->as_png;
+=cut
+
+
+my $data = do { local (@ARGV, $/) = 'callog'; <> };
+
+my ($paths, $heads);
+
+my $meta;
+
+while ($data =~ /XXXXX(.+?)YYY/msg) {
+  my @points = grep { $_ ne '(eval)' and $_ !~ /::(?: __ANON__ | BlockRunner::_?run | try (?: \s+ \{\.\.\.\} \s* )? | txn_do | preserve_context | MOP::Class:::around)$/x  } reverse $1 =~ /invoked as (.+?) at /g;
+
+  while ($points[0] !~ /^DBIx/) {
+    shift @points;
+  }
+
+  push @points, '_resolve_column_info';
+
+  for (1..$#points) {
+    $meta->{$points[$_-1]}{$points[$_]}++;
+  }
+
+#  my @pp;
+#  for (0..$#points) {
+#    push @pp, sprintf '%s-> %s', ' ' x (2*$_), $points[$_];
+#  }
+#  my $ppid = join "\n", '', @pp;
+#
+#  unless ($paths->{$ppid}) {
+#    $paths->{$ppid}{points} = \@points;
+#    push @{$heads->{$points[0]}}, $ppid;
+#  }
+#  $paths->{$ppid}{callcount}++;
+}
+
+my $cluster_re = qr/^
+  DBIx::Class:: (
+    Storage::DBIHacks | Storage::DBI(?=(?:Hacks)?::) | SQLMaker
+  ) .*? ::[^:]+
+$/x;
+
+my $g = GraphViz->new( layout => 'dot', node => { shape => 'box' }, concetrate => 1, ratio => 'auto' );
+for my $f (keys %$meta) {
+
+  $g->add_node($f, cluster => ($f =~ $cluster_re)[0]||'' );
+  for my $t (keys %{$meta->{$f}}) {
+    $g->add_node($t, cluster => ($t =~ $cluster_re)[0]||'' );
+    $g->add_edge(
+      $f => $t,
+#      taillabel => $f,
+      label => $meta->{$f}{$t},
+    );
+  }
+}
+
+$g->as_svg('grph.svg');
+
+
+__END__
+
+PATH:
+for my $p (keys %$paths) {
+  for ( reverse ( 0 .. $#{$paths->{$p}{points}} ) ) {
+    if ( my $n = $heads->{$paths->{$p}{points}[$_]} ) {
+      die Dumper $n;
+    }
+  }
+}
+
+die Dumper [ keys %$paths ];
