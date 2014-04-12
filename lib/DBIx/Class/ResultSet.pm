@@ -2226,8 +2226,8 @@ case there are obviously no benefits to using this method over L</create>.
 
 sub populate {
   my $self = shift;
+  my $into_columns = $_[0]->[0];
 
-  # cruft placed in standalone method
   my $data = $self->_normalize_populate_args(@_);
 
   return unless @$data;
@@ -2237,15 +2237,13 @@ sub populate {
     return wantarray ? @created : \@created;
   }
   else {
-    my $first = $data->[0];
-
     # if a column is a registered relationship, and is a non-blessed hash/array, consider
     # it relationship data
     my (@rels, @columns);
     my $rsrc = $self->result_source;
     my $rels = { map { $_ => $rsrc->relationship_info($_) } $rsrc->relationships };
-    for (keys %$first) {
-      my $ref = ref $first->{$_};
+    for (@$into_columns) {
+      my $ref = ref $_;
       $rels->{$_} && ($ref eq 'ARRAY' or $ref eq 'HASH')
         ? push @rels, $_
         : push @columns, $_
@@ -2256,13 +2254,30 @@ sub populate {
 
     ## do the belongs_to relationships
     foreach my $index (0..$#$data) {
-
-      # delegate to create() for any dataset without primary keys with specified relationships
-      if (grep { !defined $data->[$index]->{$_} } @pks ) {
-        for my $r (@rels) {
-          if (grep { ref $data->[$index]{$r} eq $_ } qw/HASH ARRAY/) {  # a related set must be a HASH or AoH
-            my @ret = $self->populate($data);
-            return;
+      if (ref($data->[$index]) eq 'CODE') {
+        #FIXME: when coderefs get pushed from normalize_populate_args, they can get treated here
+      } elsif (ref($data->[$index]) eq 'REF' and ref(${$data->[$index]}) eq 'ARRAY') {
+        my $sql_maker = $self->result_source->schema->storage->sql_maker;
+        my $destination_table = $self->result_source->from;
+        $destination_table = (ref $destination_table) ? $$destination_table : $sql_maker->_quote($destination_table);
+        my @subselect = @{${$data->[$index]}};
+        my @quoted_columns = map { $sql_maker->_quote($_) } @columns;
+        # Strip off the leading and trailing parenthesis that as_query always puts
+        # on the query
+        $subselect[0] =~ s/^\(//;
+        $subselect[0] =~ s/\)$//;
+        $subselect[0] = "INSERT INTO $destination_table ( " . (join ",", @columns) . " ) " . $subselect[0];
+        
+        my $set = $self->result_source->schema->storage->dbh->do(@subselect);
+        next;
+      } else {
+        # delegate to create() for any dataset without primary keys with specified relationships
+        if (grep { !defined $data->[$index]->{$_} } @pks ) {
+          for my $r (@rels) {
+            if (grep { ref $data->[$index]{$r} eq $_ } qw/HASH ARRAY/) {  # a related set must be a HASH or AoH
+              my @ret = $self->populate($data);
+              return;
+            }
           }
         }
       }
@@ -2341,7 +2356,19 @@ sub _normalize_populate_args {
       my @ret;
       my @colnames = @{$arg->[0]};
       foreach my $values (@{$arg}[1 .. $#$arg]) {
-        push @ret, { map { $colnames[$_] => $values->[$_] } (0 .. $#colnames) };
+        if (ref $values eq 'ARRAY') {
+          push @ret, { map { $colnames[$_] => $values->[$_] } (0 .. $#colnames) };
+        } elsif (ref $values eq 'CODE') {
+          # FIXME: Riba says that this needs to be handed directly to DBI somehow
+          # Invoke the coderef until it returns undef. Normalize it, as it can return arrayrefs, hashrefs...
+          my $value = $values->();
+          while (defined $value) {
+            push @ret, @{ $self->_normalize_populate_args([$arg->[0], $value]) };
+            $value = $values->();
+          }
+        } else {
+          push @ret, $values;
+        }
       }
       return \@ret;
     }
