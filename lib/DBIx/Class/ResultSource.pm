@@ -307,25 +307,20 @@ whatever your database supports.
    { size => 20 }
 
 The length of your column, if it is a column type that can have a size
-restriction. This is currently only used to create tables from your
-schema, see L<DBIx::Class::Schema/deploy>.
+restriction.
 
 =item is_nullable
 
    { is_nullable => 1 }
 
 Set this to a true value for a column that is allowed to contain NULL
-values, default is false. This is currently only used to create tables
-from your schema, see L<DBIx::Class::Schema/deploy>.
+values, default is false.
 
 =item is_auto_increment
 
    { is_auto_increment => 1 }
 
 Set to true when a column's value is automatically set by your database engine.
-
-This is used when creating tables from your schema, see
-L<DBIx::Class::Schema/deploy>.
 
 It is also used when cloning objects.  See 'is_auto_increment' above in the
 L</data_manipulation__or_dml_> section.
@@ -335,8 +330,7 @@ L</data_manipulation__or_dml_> section.
    { is_foreign_key => 1 }
 
 Set this to a true value for a column that contains a key from a
-foreign table, defaults to false. This is currently only used to
-create tables from your schema, see L<DBIx::Class::Schema/deploy>.
+foreign table, defaults to false.
 
 =item default_value
 
@@ -344,9 +338,7 @@ create tables from your schema, see L<DBIx::Class::Schema/deploy>.
 
 Set this to the default value which will be inserted into a column by
 the database. Can contain either a value or a function (use a
-reference to a scalar e.g. C<\'now()'> if you want a function). This
-is currently only used to create tables from your schema, see
-L<DBIx::Class::Schema/deploy>.
+reference to a scalar e.g. C<\'now()'> if you want a function).
 
 See the note on L<DBIx::Class::Row/new> for more information about possible
 issues related to db-side default values.
