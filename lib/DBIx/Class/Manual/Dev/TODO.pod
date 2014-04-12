@@ -37,11 +37,40 @@ paragraphs detailing the reasons for this branch to exist.
 
 =head2 Refactoring / Cleanup / Architectural improvements
 
-=head3 Rename relationship-creation methods
+=head3 Finally rename relationship helpers, deprecate belongs_to/has_many
+
+=over
+
+RT:83712
+
+NS
+
+=back
 
 People find C<belongs_to> and C<has_many> confusing.  RT#83712 has an initial
 attempt at renaming C<belongs_to> to C<refers_to>, which seems to be generally
 favoured; but it needs to be fleshed out for the other relationship types.
+
+*INSERT ACRANE's TABLE HERE*
+
+The core issue is that while experienced users of DBIC understand it is just a
+"way to style the JOIN clause", for non-rdbms users this is just a "method
+that does some magic to get me the right related stuff". Thus the inner/left
+and one/many individual combinations need to be preserved as individual methods.
+
+The proposal of refers_to fails to differentiate clearly the "non-belongs_to"
+cases. Consider:
+
+ refers_to / maybe_refers_to / referred_to / maybe_referred_to / many_refer_to
+
+The proposal that was shot down in ~2010 by mst iirc was:
+
+ owned_by / maybe_owned_by
+
+ maybe_owns_one / owns_one / owns_many
+
+While less clear on the *referential* part, it is very clear on the *direction*
+part, and imo is clearer to a non-DB person.
 
 =head3 Cleanup/rewrite DBIx::Class::ResultSet::_merge_joinpref_attr()
 
