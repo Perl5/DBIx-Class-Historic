@@ -3715,18 +3715,35 @@ sub _rollout_hash {
 sub _calculate_score {
   my ($self, $a, $b) = @_;
 
+  # Return 0 if $a or $b is defined but not both.
   if (defined $a xor defined $b) {
     return 0;
   }
+  # Return 1 if $a is not defined.
   elsif (not defined $a) {
     return 1;
   }
 
+  # Can accept duplicates { -k => 1 }, { -k => 1 } but not 
+  # conflicts { -k => 1, $k => 2 }
+  my $check_conflicting_keys = sub { my ($h1, $h2, $k1, $k2) = @_; 
+    $k1 ||= "";
+    $k2 ||= "";
+    return 1 if ($k1) ne ($k2);
+    $h1->{$k1} ||="";
+    $h2->{$k2} ||= "";
+    return if ( ref($h1->{$k1})||ref($h2->{$k2}));
+    die "Conflicting keys $k1. $h1->{$k1} $h2->{$k1}" if ( $h1->{$k1} !~ m/^$h2->{$k2}$/ );
+    return 1;
+  };
+
+  # We only get here if both $a and $b are defined.
   if (ref $b eq 'HASH') {
     my ($b_key) = keys %{$b};
     if (ref $a eq 'HASH') {
       my ($a_key) = keys %{$a};
-      if ($a_key eq $b_key) {
+      if (($a_key||"") eq ($b_key||"")) {
+        $check_conflicting_keys->($a, $b, $a_key, $b_key);
         return (1 + $self->_calculate_score( $a->{$a_key}, $b->{$b_key} ));
       } else {
         return 0;
@@ -3744,8 +3761,21 @@ sub _calculate_score {
   }
 }
 
+# *****************************************************************
+#
+# _merge_joinpref_attr($orig, $import);
+#
+# Calls _rollout_attr for $orig
+# Calls _rollout_attr for $import
+# Calls _calculate_score to compare $orig and $import.
+# Recursively calls _merge_joinpref_attr tracking call depth.
+#
+# *****************************************************************
+
 sub _merge_joinpref_attr {
-  my ($self, $orig, $import) = @_;
+  my ($self, $orig, $import, $depth) = @_;
+
+  $depth ||= 0;
 
   return $import unless defined($orig);
   return $orig unless defined($import);
@@ -3777,13 +3807,14 @@ sub _merge_joinpref_attr {
         $orig->[$best_candidate->{position}] = $import_element;
       } elsif (ref $import_element eq 'HASH') {
         my ($key) = keys %{$orig_best};
-        $orig->[$best_candidate->{position}] = { $key => $self->_merge_joinpref_attr($orig_best->{$key}, $import_element->{$key}) };
+        $orig->[$best_candidate->{position}] = { $key => $self->_merge_joinpref_attr($orig_best->{$key}, $import_element->{$key}, $depth+1) };
       }
     }
     $seen_keys->{$import_key} = 1; # don't merge the same key twice
   }
 
-  return @$orig ? $orig : ();
+  return $orig->[0] if (scalar(@$orig)==1 && $depth>0);
+  return @$orig ? $orig : ({});
 }
 
 {
