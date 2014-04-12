@@ -19,6 +19,8 @@ foreach (
     [qw(artistid)] ],
   [ operator => { artistid => { '=' => 1 }, rank => { '>' => 12 }, charfield => { '=' => undef } },
     [qw(artistid)] ],
+  [ "= array" => { artistid => { '=' => [ 1 ], }, rank => { '=' => [ 1, 2 ] } },
+    [qw(artistid)] ],
 ) {
   my ($desc, $where, $exp) = @$_;
 

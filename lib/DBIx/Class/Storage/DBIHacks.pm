@@ -1021,7 +1021,8 @@ sub _extract_fixed_condition_columns {
           or
         (ref $val eq 'ARRAY' and @$val == 1 and defined $val->[0])
           or
-        (ref $val eq 'HASH' and keys %$val == 1 and defined $val->{'='})
+        (ref $val eq 'HASH' and keys %$val == 1 and defined $val->{'='}
+           and @{$self->_extract_fixed_condition_columns({ $lhs => $val->{'='} })})
       ));
     }
   }
