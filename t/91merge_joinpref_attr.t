@@ -199,9 +199,9 @@ my $rs = $schema->resultset( 'CD' );
 {
   my $a = [ 'artist', 'cd', { 'artist' => 'manager' } ];
   my $b = { 'artist' => 'manager' };
-  my $expected = [ 'artist', 'cd', { 'artist' => [ 'manager' ] } ];
+  my $expected = [ 'artist', 'cd', { 'artist' => 'manager' } ];
   my $result = $rs->_merge_joinpref_attr($a, $b);
-  is_deeply( $result, $expected );
+  is_deeply( $result, $expected, 'xxxx' );
 }
 
 {

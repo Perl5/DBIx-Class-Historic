@@ -3727,11 +3727,9 @@ sub _calculate_score {
   # Can accept duplicates { -k => 1 }, { -k => 1 } but not 
   # conflicts { -k => 1, $k => 2 }
   my $check_conflicting_keys = sub { my ($h1, $h2, $k1, $k2) = @_; 
-    $k1 ||= "";
-    $k2 ||= "";
+    no warnings qw/ uninitialized /;
     return 1 if ($k1) ne ($k2);
-    $h1->{$k1} ||="";
-    $h2->{$k2} ||= "";
+    return 1 if $k1 !~ m/^-/;
     return if ( ref($h1->{$k1})||ref($h2->{$k2}));
     die "Conflicting keys $k1. $h1->{$k1} $h2->{$k1}" if ( $h1->{$k1} !~ m/^$h2->{$k2}$/ );
     return 1;
