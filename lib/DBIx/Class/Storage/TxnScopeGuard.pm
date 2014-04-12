@@ -5,11 +5,9 @@ use warnings;
 use Try::Tiny;
 use Scalar::Util qw/weaken blessed refaddr/;
 use DBIx::Class;
-use DBIx::Class::Exception;
+use DBIx::Class::_Util 'is_exception';
 use DBIx::Class::Carp;
 use namespace::clean;
-
-my ($guards_count, $compat_handler, $foreign_handler);
 
 sub new {
   my ($class, $storage) = @_;
@@ -22,52 +20,21 @@ sub new {
   # we are starting with an already set $@ - in order for things to work we need to
   # be able to recognize it upon destruction - store its weakref
   # recording it before doing the txn_begin stuff
-  if (defined $@ and $@ ne '') {
-    $guard->{existing_exception_ref} = (ref $@ ne '') ? $@ : \$@;
-    weaken $guard->{existing_exception_ref};
+  #
+  # FIXME FRAGILE - any eval that fails but *does not* rethrow between here
+  # and the unwind will trample over $@ and invalidate the entire mechanism
+  # There got to be a saner way of doing this...
+  if (is_exception $@) {
+    weaken(
+      $guard->{existing_exception_ref} = (ref($@) eq '') ? \$@ : $@
+    );
   }
 
   $storage->txn_begin;
 
-  $guard->{dbh} = $storage->_dbh;
-  weaken $guard->{dbh};
+  weaken( $guard->{dbh} = $storage->_dbh );
 
   bless $guard, ref $class || $class;
-
-  # install a callback carefully
-  if (DBIx::Class::_ENV_::INVISIBLE_DOLLAR_AT and !$guards_count) {
-
-    # if the thrown exception is a plain string, wrap it in our
-    # own exception class
-    # this is actually a pretty cool idea, may very well keep it
-    # after perl is fixed
-    $compat_handler ||= bless(
-      sub {
-        $@ = (blessed($_[0]) or ref($_[0]))
-          ? $_[0]
-          : bless ( { msg => $_[0] }, 'DBIx::Class::Exception')
-        ;
-        die;
-      },
-      '__TxnScopeGuard__FIXUP__',
-    );
-
-    if ($foreign_handler = $SIG{__DIE__}) {
-      $SIG{__DIE__} = bless (
-        sub {
-          # we trust the foreign handler to do whatever it wants, all we do is set $@
-          eval { $compat_handler->(@_) };
-          $foreign_handler->(@_);
-        },
-        '__TxnScopeGuard__FIXUP__',
-      );
-    }
-    else {
-      $SIG{__DIE__} = $compat_handler;
-    }
-  }
-
-  $guards_count++;
 
   $guard;
 }
@@ -85,44 +52,19 @@ sub commit {
 sub DESTROY {
   my $self = shift;
 
-  $guards_count--;
-
-  # don't touch unless it's ours, and there are no more of us left
-  if (
-    DBIx::Class::_ENV_::INVISIBLE_DOLLAR_AT
-      and
-    !$guards_count
-  ) {
-
-    if (ref $SIG{__DIE__} eq '__TxnScopeGuard__FIXUP__') {
-      # restore what we saved
-      if ($foreign_handler) {
-        $SIG{__DIE__} = $foreign_handler;
-      }
-      else {
-        delete $SIG{__DIE__};
-      }
-    }
-
-    # make sure we do not leak the foreign one in case it exists
-    undef $foreign_handler;
-  }
-
   return if $self->{inactivated};
 
   # if our dbh is not ours anymore, the $dbh weakref will go undef
-  $self->{storage}->_verify_pid;
+  $self->{storage}->_verify_pid unless DBIx::Class::_ENV_::BROKEN_FORK;
   return unless $self->{dbh};
 
   my $exception = $@ if (
-    defined $@
-      and
-    $@ ne ''
+    is_exception $@
       and
     (
       ! defined $self->{existing_exception_ref}
         or
-      refaddr( ref $@ eq '' ? \$@ : $@ ) != refaddr($self->{existing_exception_ref})
+      refaddr( ref($@) eq '' ? \$@ : $@ ) != refaddr($self->{existing_exception_ref})
     )
   );
 
@@ -164,7 +106,7 @@ sub DESTROY {
     }
   }
 
-  $@ = $exception unless DBIx::Class::_ENV_::INVISIBLE_DOLLAR_AT;
+  $@ = $exception;
 }
 
 1;

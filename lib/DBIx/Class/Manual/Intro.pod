@@ -67,7 +67,7 @@ The important thing to understand:
 =head2 Search results are returned as Rows
 
 Rows of the search from the database are blessed into
-L<DBIx::Class::Row> objects.
+L<Result|DBIx::Class::Manual::ResultClass> objects.
 
 =head1 SETTING UP DBIx::Class
 
@@ -209,7 +209,7 @@ If you have a mixed-case database, use the C<preserve_case> option, e.g.:
 If you are using L<Catalyst>, then you can use the helper that comes with
 L<Catalyst::Model::DBIC::Schema>:
 
-    $ script/myapp_create.pl model MyDB DBIC::Schema MyDB::Schema \
+    $ script/myapp_create.pl model MyModel DBIC::Schema MyApp::Schema \
         create=static moniker_map='{ foo => "FOO" }' dbi:SQLite:./myapp.db \
         on_connect_do='PRAGMA foreign_keys=ON' quote_char='"'
 
@@ -420,7 +420,7 @@ similarity ends. Any time you call a CRUD operation on a row (e.g.
 L<delete|DBIx::Class::Row/delete>,
 L<update|DBIx::Class::Row/update>,
 L<discard_changes|DBIx::Class::Row/discard_changes>,
-etc.) DBIx::Class will use the values of of the
+etc.) DBIx::Class will use the values of the
 L<primary key|DBIx::Class::ResultSource/set_primary_key> columns to populate
 the C<WHERE> clause necessary to accomplish the operation. This is why it is
 important to declare a L<primary key|DBIx::Class::ResultSource/set_primary_key>
@@ -445,10 +445,10 @@ L<delete|DBIx::Class::ResultSet/delete>
 For example, the following would not work (assuming C<People> does not have
 a declared PK):
 
- my $row = $schema->resultset('People')
+ my $result = $schema->resultset('People')
                    ->search({ last_name => 'Dantes' })
                     ->next;
- $row->update({ children => 2 }); # <-- exception thrown because $row isn't
+ $result->update({ children => 2 }); # <-- exception thrown because $result isn't
                                   # necessarily unique
 
 So instead the following should be done:

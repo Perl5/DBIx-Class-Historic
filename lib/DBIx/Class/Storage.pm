@@ -175,15 +175,16 @@ transaction failure.
 
 sub txn_do {
   my $self = shift;
-  my $coderef = shift;
 
   DBIx::Class::Storage::BlockRunner->new(
     storage => $self,
-    run_code => $coderef,
-    run_args => \@_, # take a ref instead of a copy, to preserve coderef @_ aliasing semantics
     wrap_txn => 1,
-    retry_handler => sub { ! ( $_[0]->retried_count or $_[0]->storage->connected ) },
-  )->run;
+    retry_handler => sub {
+      $_[0]->failed_attempt_count == 1
+        and
+      ! $_[0]->storage->connected
+    },
+  )->run(@_);
 }
 
 =head2 txn_begin
@@ -395,8 +396,8 @@ L<DBIx::Class::Storage::TxnScopeGuard>:
 
  my $txn_guard = $storage->txn_scope_guard;
 
- $row->col1("val1");
- $row->update;
+ $result->col1("val1");
+ $result->update;
 
  $txn_guard->commit;
 
@@ -434,7 +435,7 @@ shell environment.
 =head2 debugfh
 
 Set or retrieve the filehandle used for trace/debug output.  This should be
-an IO::Handle compatible object (only the C<print> method is used.  Initially
+an IO::Handle compatible object (only the C<print> method is used).  Initially
 set to be STDERR - although see information on the
 L<DBIC_TRACE> environment variable.
 
@@ -467,6 +468,8 @@ sub debugobj {
   $self->{debugobj} ||= do {
     if (my $profile = $ENV{DBIC_TRACE_PROFILE}) {
       require DBIx::Class::Storage::Debug::PrettyPrint;
+      my @pp_args;
+
       if ($profile =~ /^\.?\//) {
         require Config::Any;
 
@@ -478,10 +481,28 @@ sub debugobj {
           $self->throw_exception("Failure processing \$ENV{DBIC_TRACE_PROFILE}: $_");
         };
 
-        DBIx::Class::Storage::Debug::PrettyPrint->new(values %{$cfg->[0]});
+        @pp_args = values %{$cfg->[0]};
       }
       else {
-        DBIx::Class::Storage::Debug::PrettyPrint->new({ profile => $profile });
+        @pp_args = { profile => $profile };
+      }
+
+      # FIXME - FRAGILE
+      # Hash::Merge is a sorry piece of shit and tramples all over $@
+      # *without* throwing an exception
+      # This is a rather serious problem in the debug codepath
+      # Insulate the condition here with a try{} until a review of
+      # DBIx::Class::Storage::Debug::PrettyPrint takes place
+      # we do rethrow the error unconditionally, the only reason
+      # to try{} is to preserve the precise state of $@ (down
+      # to the scalar (if there is one) address level)
+      #
+      # Yes I am aware this is fragile and TxnScopeGuard needs
+      # a better fix. This is another yak to shave... :(
+      try {
+        DBIx::Class::Storage::Debug::PrettyPrint->new(@pp_args);
+      } catch {
+        $self->throw_exception($_);
       }
     }
     else {
@@ -623,11 +644,9 @@ Old name for DBIC_TRACE
 L<DBIx::Class::Storage::DBI> - reference storage implementation using
 SQL::Abstract and DBI.
 
-=head1 AUTHORS
+=head1 AUTHOR AND CONTRIBUTORS
 
-Matt S. Trout <mst@shadowcatsystems.co.uk>
-
-Andy Grundman <andy@hybridized.org>
+See L<AUTHOR|DBIx::Class/AUTHOR> and L<CONTRIBUTORS|DBIx::Class/CONTRIBUTORS> in DBIx::Class
 
 =head1 LICENSE
 

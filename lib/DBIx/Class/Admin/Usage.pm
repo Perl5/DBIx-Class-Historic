@@ -1,6 +1,8 @@
 package     # hide from PAUSE
     DBIx::Class::Admin::Usage;
 
+use warnings;
+use strict;
 
 use base 'Getopt::Long::Descriptive::Usage';
 
@@ -21,7 +23,7 @@ sub set_simple {
 
 
 
-# This returns the usage formated as a pod document
+# This returns the usage formatted as a pod document
 sub pod {
   my ($self) = @_;
   return join qq{\n}, $self->pod_leader_text, $self->pod_option_text, $self->pod_authorlic_text;

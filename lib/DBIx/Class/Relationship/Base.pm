@@ -54,9 +54,16 @@ source, indicated by its class name.
 The condition argument describes the C<ON> clause of the C<JOIN>
 expression used to connect the two sources when creating SQL queries.
 
-To create simple equality joins, supply a hashref containing the
-remote table column name as the key(s), and the local table column
-name as the value(s), for example given:
+=head4 Simple equality
+
+To create simple equality joins, supply a hashref containing the remote
+table column name as the key(s) prefixed by C<'foreign.'>, and the
+corresponding local table column name as the value(s) prefixed by C<'self.'>.
+Both C<foreign> and C<self> are pseudo aliases and must be entered
+literally. They will be replaced with the actual correct table alias
+when the SQL is produced.
+
+For example given:
 
   My::Schema::Author->has_many(
     books => 'My::Schema::Book',
@@ -74,10 +81,6 @@ will result in the following C<JOIN> clause:
 This describes a relationship between the C<Author> table and the
 C<Book> table where the C<Book> table has a column C<author_id>
 containing the ID value of the C<Author>.
-
-C<foreign> and C<self> are pseudo aliases and must be entered
-literally. They will be replaced with the actual correct table alias
-when the SQL is produced.
 
 Similarly:
 
@@ -103,9 +106,11 @@ will result in the C<JOIN> clause:
 This describes the relationship from C<Book> to C<Edition>, where the
 C<Edition> table refers to a publisher and a type (e.g. "paperback"):
 
+=head4 Multiple groups of simple equality conditions
+
 As is the default in L<SQL::Abstract>, the key-value pairs will be
-C<AND>ed in the result. C<OR> can be achieved with an arrayref, for
-example a condition like:
+C<AND>ed in the resulting C<JOIN> clause. An C<OR> can be achieved with
+an arrayref. For example a condition like:
 
   My::Schema::Item->has_many(
     related_item_links => My::Schema::Item::Links,
@@ -124,6 +129,14 @@ will translate to the following C<JOIN> clause:
 This describes the relationship from C<Item> to C<Item::Links>, where
 C<Item::Links> is a many-to-many linking table, linking items back to
 themselves in a peer fashion (without a "parent-child" designation)
+
+=head4 Custom join conditions
+
+  NOTE: The custom join condition specification mechanism is capable of
+  generating JOIN clauses of virtually unlimited complexity. This may limit
+  your ability to traverse some of the more involved relationship chains the
+  way you expect, *and* may bring your RDBMS to its knees. Exercise care
+  when declaring relationships as described here.
 
 To specify joins which describe more than a simple equality of column
 values, the custom join condition coderef syntax can be used. For
@@ -168,8 +181,8 @@ clause of the C<JOIN> statement associated with this relationship.
 
 While every coderef-based condition must return a valid C<ON> clause, it may
 elect to additionally return a simplified join-free condition hashref when
-invoked as C<< $row_object->relationship >>, as opposed to
-C<< $rs->related_resultset('relationship') >>. In this case C<$row_object> is
+invoked as C<< $result->relationship >>, as opposed to
+C<< $rs->related_resultset('relationship') >>. In this case C<$result> is
 passed to the coderef as C<< $args->{self_rowobj} >>, so a user can do the
 following:
 
@@ -206,24 +219,24 @@ With the bind values:
     '4', '1990', '1979'
 
 Note that in order to be able to use
-L<< $row->create_related|DBIx::Class::Relationship::Base/create_related >>,
+L<< $result->create_related|DBIx::Class::Relationship::Base/create_related >>,
 the coderef must not only return as its second such a "simple" condition
 hashref which does not depend on joins being available, but the hashref must
 contain only plain values/deflatable objects, such that the result can be
 passed directly to L<DBIx::Class::Relationship::Base/set_from_related>. For
 instance the C<year> constraint in the above example prevents the relationship
-from being used to to create related objects (an exception will be thrown).
+from being used to create related objects (an exception will be thrown).
 
 In order to allow the user to go truly crazy when generating a custom C<ON>
 clause, the C<$args> hashref passed to the subroutine contains some extra
 metadata. Currently the supplied coderef is executed as:
 
   $relationship_info->{cond}->({
-    self_alias        => The alias of the invoking resultset ('me' in case of a row object),
+    self_alias        => The alias of the invoking resultset ('me' in case of a result object),
     foreign_alias     => The alias of the to-be-joined resultset (often matches relname),
     self_resultsource => The invocant's resultsource,
     foreign_relname   => The relationship name (does *not* always match foreign_alias),
-    self_rowobj       => The invocant itself in case of $row_obj->relationship
+    self_rowobj       => The invocant itself in case of a $result_object->$relationship call
   });
 
 =head3 attributes
@@ -284,13 +297,13 @@ For a 'belongs_to relationship, note the 'cascade_update':
 =item \%column
 
 A hashref where each key is the accessor you want installed in the main class,
-and its value is the name of the original in the fireign class.
+and its value is the name of the original in the foreign class.
 
   MyApp::Schema::Track->belongs_to( cd => 'DBICTest::Schema::CD', 'cd', {
       proxy => { cd_title => 'title' },
   });
 
-This will create an accessor named C<cd_title> on the C<$track> row object.
+This will create an accessor named C<cd_title> on the C<$track> result object.
 
 =back
 
@@ -386,7 +399,7 @@ L<DBIx::Class::Schema/create_ddl_dir>. Default is on, set to 0 to disable.
 
 =over 4
 
-=item Arguments: $relname, $rel_info
+=item Arguments: $rel_name, $rel_info
 
 =back
 
@@ -401,29 +414,60 @@ sub register_relationship { }
 
 =over 4
 
-=item Arguments: $relationship_name
+=item Arguments: $rel_name
 
-=item Return Value: $related_resultset
+=item Return Value: L<$related_resultset|DBIx::Class::ResultSet>
 
 =back
 
   $rs = $cd->related_resultset('artist');
 
 Returns a L<DBIx::Class::ResultSet> for the relationship named
-$relationship_name.
+$rel_name.
+
+=head2 $relationship_accessor
+
+=over 4
+
+=item Arguments: none
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass> | L<$related_resultset|DBIx::Class::ResultSet> | undef
+
+=back
+
+  # These pairs do the same thing
+  $result = $cd->related_resultset('artist')->single;  # has_one relationship
+  $result = $cd->artist;
+  $rs = $cd->related_resultset('tracks');           # has_many relationship
+  $rs = $cd->tracks;
+
+This is the recommended way to traverse through relationships, based
+on the L</accessor> name given in the relationship definition.
+
+This will return either a L<Result|DBIx::Class::Manual::ResultClass> or a
+L<ResultSet|DBIx::Class::ResultSet>, depending on if the relationship is
+C<single> (returns only one row) or C<multi> (returns many rows).  The
+method may also return C<undef> if the relationship doesn't exist for
+this instance (like in the case of C<might_have> relationships).
 
 =cut
 
 sub related_resultset {
   my $self = shift;
+
   $self->throw_exception("Can't call *_related as class methods")
     unless ref $self;
-  my $rel = shift;
-  my $rel_info = $self->relationship_info($rel);
-  $self->throw_exception( "No such relationship ${rel}" )
-    unless $rel_info;
 
-  return $self->{related_resultsets}{$rel} ||= do {
+  my $rel = shift;
+
+  return $self->{related_resultsets}{$rel}
+    if defined $self->{related_resultsets}{$rel};
+
+  return $self->{related_resultsets}{$rel} = do {
+
+    my $rel_info = $self->relationship_info($rel)
+      or $self->throw_exception( "No such relationship '$rel'" );
+
     my $attrs = (@_ > 1 && ref $_[$#_] eq 'HASH' ? pop(@_) : {});
     $attrs = { %{$rel_info->{attrs} || {}}, %$attrs };
 
@@ -431,12 +475,12 @@ sub related_resultset {
       if (@_ > 1 && (@_ % 2 == 1));
     my $query = ((@_ > 1) ? {@_} : shift);
 
-    my $source = $self->result_source;
+    my $rsrc = $self->result_source;
 
     # condition resolution may fail if an incomplete master-object prefetch
     # is encountered - that is ok during prefetch construction (not yet in_storage)
     my ($cond, $is_crosstable) = try {
-      $source->_resolve_condition( $rel_info->{cond}, $rel, $self, $rel )
+      $rsrc->_resolve_condition( $rel_info->{cond}, $rel, $self, $rel )
     }
     catch {
       if ($self->in_storage) {
@@ -449,8 +493,8 @@ sub related_resultset {
     # keep in mind that the following if() block is part of a do{} - no return()s!!!
     if ($is_crosstable) {
       $self->throw_exception (
-        "A cross-table relationship condition returned for statically declared '$rel'")
-          unless ref $rel_info->{cond} eq 'CODE';
+        "A cross-table relationship condition returned for statically declared '$rel'"
+      ) unless ref $rel_info->{cond} eq 'CODE';
 
       # A WHOREIFFIC hack to reinvoke the entire condition resolution
       # with the correct alias. Another way of doing this involves a
@@ -462,11 +506,11 @@ sub related_resultset {
       # root alias as 'me', instead of $rel (as opposed to invoking
       # $rs->search_related)
 
-      local $source->{_relationships}{me} = $source->{_relationships}{$rel};  # make the fake 'me' rel
-      my $obj_table_alias = lc($source->source_name) . '__row';
+      local $rsrc->{_relationships}{me} = $rsrc->{_relationships}{$rel};  # make the fake 'me' rel
+      my $obj_table_alias = lc($rsrc->source_name) . '__row';
       $obj_table_alias =~ s/\W+/_/g;
 
-      $source->resultset->search(
+      $rsrc->resultset->search(
         $self->ident_condition($obj_table_alias),
         { alias => $obj_table_alias },
       )->search_related('me', $query, $attrs)
@@ -476,7 +520,7 @@ sub related_resultset {
       # at some point what it does. Also the entire UNRESOLVABLE_CONDITION
       # business seems shady - we could simply not query *at all*
       if ($cond eq $DBIx::Class::ResultSource::UNRESOLVABLE_CONDITION) {
-        my $reverse = $source->reverse_relationship_info($rel);
+        my $reverse = $rsrc->reverse_relationship_info($rel);
         foreach my $rev_rel (keys %$reverse) {
           if ($reverse->{$rev_rel}{attrs}{accessor} && $reverse->{$rev_rel}{attrs}{accessor} eq 'multi') {
             weaken($attrs->{related_objects}{$rev_rel}[0] = $self);
@@ -506,7 +550,7 @@ sub related_resultset {
       }
 
       $query = ($query ? { '-and' => [ $cond, $query ] } : $cond);
-      $self->result_source->related_source($rel)->resultset->search(
+      $rsrc->related_source($rel)->resultset->search(
         $query, $attrs
       );
     }
@@ -515,12 +559,19 @@ sub related_resultset {
 
 =head2 search_related
 
-  @objects = $rs->search_related('relname', $cond, $attrs);
-  $objects_rs = $rs->search_related('relname', $cond, $attrs);
+=over 4
+
+=item Arguments: $rel_name, $cond?, L<\%attrs?|DBIx::Class::ResultSet/ATTRIBUTES>
+
+=item Return Value: L<$resultset|DBIx::Class::ResultSet> (scalar context) | L<@result_objs|DBIx::Class::Manual::ResultClass> (list context)
+
+=back
 
 Run a search on a related resultset. The search will be restricted to the
-item or items represented by the L<DBIx::Class::ResultSet> it was called
-upon. This method can be called on a ResultSet, a Row or a ResultSource class.
+results represented by the L<DBIx::Class::ResultSet> it was called
+upon.
+
+See L<DBIx::Class::ResultSet/search_related> for more information.
 
 =cut
 
@@ -529,8 +580,6 @@ sub search_related {
 }
 
 =head2 search_related_rs
-
-  ( $objects_rs ) = $rs->search_related_rs('relname', $cond, $attrs);
 
 This method works exactly the same as search_related, except that
 it guarantees a resultset, even in list context.
@@ -543,35 +592,42 @@ sub search_related_rs {
 
 =head2 count_related
 
-  $obj->count_related('relname', $cond, $attrs);
+=over 4
 
-Returns the count of all the items in the related resultset, restricted by the
-current item or where conditions. Can be called on a
-L<DBIx::Class::Manual::Glossary/"ResultSet"> or a
-L<DBIx::Class::Manual::Glossary/"Row"> object.
+=item Arguments: $rel_name, $cond?, L<\%attrs?|DBIx::Class::ResultSet/ATTRIBUTES>
+
+=item Return Value: $count
+
+=back
+
+Returns the count of all the rows in the related resultset, restricted by the
+current result or where conditions.
 
 =cut
 
 sub count_related {
-  my $self = shift;
-  return $self->search_related(@_)->count;
+  shift->search_related(@_)->count;
 }
 
 =head2 new_related
 
-  my $new_obj = $obj->new_related('relname', \%col_data);
+=over 4
 
-Create a new item of the related foreign class. If called on a
-L<Row|DBIx::Class::Manual::Glossary/"Row"> object, it will magically
-set any foreign key columns of the new object to the related primary
-key columns of the source object for you.  The newly created item will
-not be saved into your storage until you call L<DBIx::Class::Row/insert>
-on it.
+=item Arguments: $rel_name, \%col_data
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
+
+=back
+
+Create a new result object of the related foreign class.  It will magically set
+any foreign key columns of the new object to the related primary key columns
+of the source object for you.  The newly created result will not be saved into
+your storage until you call L<DBIx::Class::Row/insert> on it.
 
 =cut
 
 sub new_related {
-  my ($self, $rel, $values, $attrs) = @_;
+  my ($self, $rel, $values) = @_;
 
   # FIXME - this is a bad position for this (also an identical copy in
   # set_from_related), but I have no saner way to hook, and I absolutely
@@ -584,33 +640,42 @@ sub new_related {
   if (ref $self) {  # cdbi calls this as a class method, /me vomits
 
     my $rsrc = $self->result_source;
-    my (undef, $crosstable, $relcols) = $rsrc->_resolve_condition (
-      $rsrc->relationship_info($rel)->{cond}, $rel, $self, $rel
+    my $rel_info = $rsrc->relationship_info($rel)
+      or $self->throw_exception( "No such relationship '$rel'" );
+    my (undef, $crosstable, $cond_targets) = $rsrc->_resolve_condition (
+      $rel_info->{cond}, $rel, $self, $rel
     );
 
     $self->throw_exception("Custom relationship '$rel' does not resolve to a join-free condition fragment")
       if $crosstable;
 
-    if (@{$relcols || []} and @$relcols = grep { ! exists $values->{$_} } @$relcols) {
+    if (my @unspecified_rel_condition_chunks = grep { ! exists $values->{$_} } @{$cond_targets||[]} ) {
       $self->throw_exception(sprintf (
         "Custom relationship '%s' not definitive - returns conditions instead of values for column(s): %s",
         $rel,
-        map { "'$_'" } @$relcols
+        map { "'$_'" } @unspecified_rel_condition_chunks
       ));
     }
   }
 
-  my $row = $self->search_related($rel)->new($values, $attrs);
-  return $row;
+  return $self->search_related($rel)->new_result($values);
 }
 
 =head2 create_related
 
-  my $new_obj = $obj->create_related('relname', \%col_data);
+=over 4
 
-Creates a new item, similarly to new_related, and also inserts the item's data
-into your storage medium. See the distinction between C<create> and C<new>
-in L<DBIx::Class::ResultSet> for details.
+=item Arguments: $rel_name, \%col_data
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
+
+=back
+
+  my $result = $obj->create_related($rel_name, \%col_data);
+
+Creates a new result object, similarly to new_related, and also inserts the
+result's data into your storage medium. See the distinction between C<create>
+and C<new> in L<DBIx::Class::ResultSet> for details.
 
 =cut
 
@@ -624,7 +689,15 @@ sub create_related {
 
 =head2 find_related
 
-  my $found_item = $obj->find_related('relname', @pri_vals | \%pri_vals);
+=over 4
+
+=item Arguments: $rel_name, \%col_data | @pk_values, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass> | undef
+
+=back
+
+  my $result = $obj->find_related($rel_name, \%col_data);
 
 Attempt to find a related object using its primary key or unique constraints.
 See L<DBIx::Class::ResultSet/find> for details.
@@ -632,18 +705,22 @@ See L<DBIx::Class::ResultSet/find> for details.
 =cut
 
 sub find_related {
-  my $self = shift;
-  my $rel = shift;
-  return $self->search_related($rel)->find(@_);
+  #my ($self, $rel, @args) = @_;
+  return shift->search_related(shift)->find(@_);
 }
 
 =head2 find_or_new_related
 
-  my $new_obj = $obj->find_or_new_related('relname', \%col_data);
+=over 4
 
-Find an item of a related class. If none exists, instantiate a new item of the
-related class. The object will not be saved into your storage until you call
-L<DBIx::Class::Row/insert> on it.
+=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
+
+=back
+
+Find a result object of a related class.  See L<DBIx::Class::ResultSet/find_or_new>
+for details.
 
 =cut
 
@@ -655,9 +732,15 @@ sub find_or_new_related {
 
 =head2 find_or_create_related
 
-  my $new_obj = $obj->find_or_create_related('relname', \%col_data);
+=over 4
 
-Find or create an item of a related class. See
+=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
+
+=back
+
+Find or create a result object of a related class. See
 L<DBIx::Class::ResultSet/find_or_create> for details.
 
 =cut
@@ -670,20 +753,33 @@ sub find_or_create_related {
 
 =head2 update_or_create_related
 
-  my $updated_item = $obj->update_or_create_related('relname', \%col_data, \%attrs?);
+=over 4
 
-Update or create an item of a related class. See
+=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
+
+=back
+
+Update or create a result object of a related class. See
 L<DBIx::Class::ResultSet/update_or_create> for details.
 
 =cut
 
 sub update_or_create_related {
-  my $self = shift;
-  my $rel = shift;
-  return $self->related_resultset($rel)->update_or_create(@_);
+  #my ($self, $rel, @args) = @_;
+  shift->related_resultset(shift)->update_or_create(@_);
 }
 
 =head2 set_from_related
+
+=over 4
+
+=item Arguments: $rel_name, L<$result|DBIx::Class::Manual::ResultClass>
+
+=item Return Value: not defined
+
+=back
 
   $book->set_from_related('author', $author_obj);
   $book->author($author_obj);                      ## same thing
@@ -706,11 +802,11 @@ sub set_from_related {
 
   my $rsrc = $self->result_source;
   my $rel_info = $rsrc->relationship_info($rel)
-    or $self->throw_exception( "No such relationship ${rel}" );
+    or $self->throw_exception( "No such relationship '$rel'" );
 
   if (defined $f_obj) {
     my $f_class = $rel_info->{class};
-    $self->throw_exception( "Object $f_obj isn't a ".$f_class )
+    $self->throw_exception( "Object '$f_obj' isn't a ".$f_class )
       unless blessed $f_obj and $f_obj->isa($f_class);
   }
 
@@ -722,7 +818,7 @@ sub set_from_related {
   #
   # sanity check - currently throw when a complex coderef rel is encountered
   # FIXME - should THROW MOAR!
-  my ($cond, $crosstable, $relcols) = $rsrc->_resolve_condition (
+  my ($cond, $crosstable, $cond_targets) = $rsrc->_resolve_condition (
     $rel_info->{cond}, $f_obj, $rel, $rel
   );
   $self->throw_exception("Custom relationship '$rel' does not resolve to a join-free condition fragment")
@@ -730,8 +826,8 @@ sub set_from_related {
   $self->throw_exception(sprintf (
     "Custom relationship '%s' not definitive - returns conditions instead of values for column(s): %s",
     $rel,
-    map { "'$_'" } @$relcols
-  )) if @{$relcols || []};
+    map { "'$_'" } @$cond_targets
+  )) if $cond_targets;
 
   $self->set_columns($cond);
 
@@ -739,6 +835,14 @@ sub set_from_related {
 }
 
 =head2 update_from_related
+
+=over 4
+
+=item Arguments: $rel_name, L<$result|DBIx::Class::Manual::ResultClass>
+
+=item Return Value: not defined
+
+=back
 
   $book->update_from_related('author', $author_obj);
 
@@ -755,9 +859,20 @@ sub update_from_related {
 
 =head2 delete_related
 
-  $obj->delete_related('relname', $cond, $attrs);
+=over 4
 
-Delete any related item subject to the given conditions.
+=item Arguments: $rel_name, $cond?, L<\%attrs?|DBIx::Class::ResultSet/ATTRIBUTES>
+
+=item Return Value: $underlying_storage_rv
+
+=back
+
+Delete any related row, subject to the given conditions.  Internally, this
+calls:
+
+  $self->search_related(@_)->delete
+
+And returns the result of that.
 
 =cut
 
@@ -770,36 +885,60 @@ sub delete_related {
 
 =head2 add_to_$rel
 
-B<Currently only available for C<has_many>, C<many-to-many> and 'multi' type
+B<Currently only available for C<has_many>, C<many_to_many> and 'multi' type
 relationships.>
+
+=head3 has_many / multi
 
 =over 4
 
-=item Arguments: ($foreign_vals | $obj), $link_vals?
+=item Arguments: \%col_data
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
+
+=back
+
+Creates/inserts a new result object.  Internally, this calls:
+
+  $self->create_related($rel, @_)
+
+And returns the result of that.
+
+=head3 many_to_many
+
+=over 4
+
+=item Arguments: (\%col_data | L<$result|DBIx::Class::Manual::ResultClass>), \%link_col_data?
+
+=item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
 
 =back
 
   my $role = $schema->resultset('Role')->find(1);
   $actor->add_to_roles($role);
-      # creates a My::DBIC::Schema::ActorRoles linking table row object
+      # creates a My::DBIC::Schema::ActorRoles linking table result object
 
   $actor->add_to_roles({ name => 'lead' }, { salary => 15_000_000 });
-      # creates a new My::DBIC::Schema::Role row object and the linking table
+      # creates a new My::DBIC::Schema::Role result object and the linking table
       # object with an extra column in the link
 
-Adds a linking table object for C<$obj> or C<$foreign_vals>. If the first
-argument is a hash reference, the related object is created first with the
-column values in the hash. If an object reference is given, just the linking
-table object is created. In either case, any additional column values for the
-linking table object can be specified in C<$link_vals>.
+Adds a linking table object. If the first argument is a hash reference, the
+related object is created first with the column values in the hash. If an object
+reference is given, just the linking table object is created. In either case,
+any additional column values for the linking table object can be specified in
+C<\%link_col_data>.
+
+See L<DBIx::Class::Relationship/many_to_many> for additional details.
 
 =head2 set_$rel
 
-B<Currently only available for C<many-to-many> relationships.>
+B<Currently only available for C<many_to_many> relationships.>
 
 =over 4
 
-=item Arguments: (\@hashrefs | \@objs), $link_vals?
+=item Arguments: (\@hashrefs_of_col_data | L<\@result_objs|DBIx::Class::Manual::ResultClass>), $link_vals?
+
+=item Return Value: not defined
 
 =back
 
@@ -829,25 +968,27 @@ removed in a future version.
 
 =head2 remove_from_$rel
 
-B<Currently only available for C<many-to-many> relationships.>
+B<Currently only available for C<many_to_many> relationships.>
 
 =over 4
 
-=item Arguments: $obj
+=item Arguments: L<$result|DBIx::Class::Manual::ResultClass>
+
+=item Return Value: not defined
 
 =back
 
   my $role = $schema->resultset('Role')->find(1);
   $actor->remove_from_roles($role);
-      # removes $role's My::DBIC::Schema::ActorRoles linking table row object
+      # removes $role's My::DBIC::Schema::ActorRoles linking table result object
 
 Removes the link between the current object and the related object. Note that
 the related object itself won't be deleted unless you call ->delete() on
 it. This method just removes the link between the two objects.
 
-=head1 AUTHORS
+=head1 AUTHOR AND CONTRIBUTORS
 
-Matt S. Trout <mst@shadowcatsystems.co.uk>
+See L<AUTHOR|DBIx::Class/AUTHOR> and L<CONTRIBUTORS|DBIx::Class/CONTRIBUTORS> in DBIx::Class
 
 =head1 LICENSE
 

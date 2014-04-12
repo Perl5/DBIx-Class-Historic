@@ -7,6 +7,11 @@ BEGIN {
     print "1..0 # SKIP your perl does not support ithreads\n";
     exit 0;
   }
+
+  if ($INC{'Devel/Cover.pm'}) {
+    print "1..0 # SKIP Devel::Cover does not work with threads yet\n";
+    exit 0;
+  }
 }
 use threads;
 
@@ -54,7 +59,7 @@ eval {
     $schema->resultset('CD')->create({ title => 'vacation in antarctica part 2', artist => 456, year => 1901 });
 
     $parent_rs = $schema->resultset('CD')->search({ year => 1901 });
-    $parent_rs->next;
+    is ($parent_rs->count, 2);
 };
 ok(!$@) or diag "Creation eval failed: $@";
 

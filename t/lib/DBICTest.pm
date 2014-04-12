@@ -3,13 +3,49 @@ package # hide from PAUSE
 
 use strict;
 use warnings;
+
+# this noop trick initializes the STDOUT, so that the TAP::Harness
+# issued IO::Select->can_read calls (which are blocking wtf wtf wtf)
+# keep spinning and scheduling jobs
+# This results in an overall much smoother job-queue drainage, since
+# the Harness blocks less
+# (ideally this needs to be addressed in T::H, but a quick patchjob
+# broke everything so tabling it for now)
+BEGIN {
+  if ($INC{'Test/Builder.pm'}) {
+    local $| = 1;
+    print "#\n";
+  }
+}
+
+use Module::Runtime 'module_notional_filename';
+BEGIN {
+  for my $mod (qw( DBIC::SqlMakerTest SQL::Abstract )) {
+    if ( $INC{ module_notional_filename($mod) } ) {
+      # FIXME this does not seem to work in BEGIN - why?!
+      #require Carp;
+      #$Carp::Internal{ (__PACKAGE__) }++;
+      #Carp::croak( __PACKAGE__ . " must be loaded before $mod" );
+
+      my ($fr, @frame) = 1;
+      while (@frame = caller($fr++)) {
+        last if $frame[1] !~ m|^t/lib/DBICTest|;
+      }
+
+      die __PACKAGE__ . " must be loaded before $mod (or modules using $mod) at $frame[1] line $frame[2]\n";
+    }
+  }
+}
+
 use DBICTest::RunMode;
 use DBICTest::Schema;
-use DBICTest::Util qw/populate_weakregistry assert_empty_weakregistry local_umask/;
+use DBICTest::Util::LeakTracer qw/populate_weakregistry assert_empty_weakregistry/;
+use DBICTest::Util 'local_umask';
 use Carp;
 use Path::Class::File ();
 use File::Spec;
 use Fcntl qw/:DEFAULT :flock/;
+use Config;
 
 =head1 NAME
 
@@ -60,7 +96,7 @@ our ($global_lock_fh, $global_exclusive_lock);
 sub import {
     my $self = shift;
 
-    my $lockpath = DBICTest::RunMode->tmpdir->file('.dbictest_global.lock');
+    my $lockpath = DBICTest::RunMode->tmpdir->file('_dbictest_global.lock');
 
     {
       my $u = local_umask(0); # so that the file opens as 666, and any user can lock
@@ -167,11 +203,21 @@ sub _database {
       # this is executed on every connect, and thus installs a disconnect/DESTROY
       # guard for every new $dbh
       on_connect_do => sub {
+
         my $storage = shift;
         my $dbh = $storage->_get_dbh;
 
         # no fsync on commit
         $dbh->do ('PRAGMA synchronous = OFF');
+
+        if (
+          $ENV{DBICTEST_SQLITE_REVERSE_DEFAULT_ORDER}
+            and
+          # the pragma does not work correctly before libsqlite 3.7.9
+          $storage->_server_info->{normalized_dbms_version} >= 3.007009
+        ) {
+          $dbh->do ('PRAGMA reverse_unordered_selects = ON');
+        }
 
         # set a *DBI* disconnect callback, to make sure the physical SQLite
         # file is still there (i.e. the test does not attempt to delete
@@ -189,7 +235,7 @@ sub _database {
 }
 
 sub __mk_disconnect_guard {
-  return if DBIx::Class::_ENV_::PEEPEENESS(); # leaks handles, delaying DESTROY, can't work right
+  return if DBIx::Class::_ENV_::PEEPEENESS; # leaks handles, delaying DESTROY, can't work right
 
   my $db_file = shift;
   return unless -f $db_file;
@@ -232,10 +278,16 @@ sub __mk_disconnect_guard {
       my $cur_inode = (stat($db_file))[1];
 
       if ($orig_inode != $cur_inode) {
-        # pack/unpack to match the unsigned longs returned by `stat`
-        $fail_reason = sprintf 'was recreated (initially inode %s, now %s)', (
-          map { unpack ('L', pack ('l', $_) ) } ($orig_inode, $cur_inode )
-        );
+        my @inodes = ($orig_inode, $cur_inode);
+        # unless this is a fixed perl (P5RT#84590) pack/unpack before display
+        # to match the unsigned longs returned by `stat`
+        @inodes = map { unpack ('L', pack ('l', $_) ) } @inodes
+          unless $Config{st_ino_size};
+
+        $fail_reason = sprintf
+          'was recreated (initially inode %s, now %s)',
+          @inodes
+        ;
       }
     }
 
@@ -314,6 +366,9 @@ sub deploy_schema {
     my $schema = shift;
     my $args = shift || {};
 
+    local $schema->storage->{debug}
+      if ($ENV{TRAVIS}||'') eq 'true';
+
     if ($ENV{"DBICTEST_SQLT_DEPLOY"}) {
         $schema->deploy($args);
     } else {
@@ -341,6 +396,9 @@ the tables with test data.
 sub populate_schema {
     my $self = shift;
     my $schema = shift;
+
+    local $schema->storage->{debug}
+      if ($ENV{TRAVIS}||'') eq 'true';
 
     $schema->populate('Genre', [
       [qw/genreid name/],

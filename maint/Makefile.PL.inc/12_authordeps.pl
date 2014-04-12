@@ -36,7 +36,7 @@ EOW
 
   # exclude the rdbms_* groups which are for DBIC users
   $opt_testdeps = {
-    map { %{$reqs_for_group{$_}} } grep { !/^rdbms_/ } keys %reqs_for_group
+    map { %{$reqs_for_group{$_}} } grep { !/^rdbms_|^dist_/ } keys %reqs_for_group
   };
 
   print "Including all optional deps\n";
@@ -66,6 +66,9 @@ EOW
 # this will run after the Makefile is written and the main Makefile.PL terminates
 #
 END {
+  # shit already hit the fan
+  return if $?;
+
   # Re-write META.yml at the end to _exclude_ all forced build-requires (we do not
   # want to ship this) We are also not using M::I::AuthorRequires as this will be
   # an extra dep, and deps in Makefile.PL still suck
@@ -91,6 +94,12 @@ END {
     Meta->write;
   }
 
+  # strip possible crlf from META
+  if ($^O eq 'MSWin32' or $^O eq 'cygwin') {
+    local $ENV{PERLIO} = 'unix';
+    system( $^X, qw( -MExtUtils::Command -e dos2unix -- META.yml),  );
+  }
+
   # test that we really took things away (just in case, happened twice somehow)
   if (! -f 'META.yml') {
     warn "No META.yml generated?! aborting...\n";
@@ -98,6 +107,12 @@ END {
     exit 1;
   }
   my $meta = do { local @ARGV = 'META.yml'; local $/; <> };
+
+  $meta =~ /^\Qname: DBIx-Class\E$/m or do {
+    warn "Seemingly malformed META.yml...?\n";
+    unlink 'Makefile';
+    exit 1;
+  };
 
   # this is safe as there is a fatal check earlier in the main Makefile.PL
   # to make sure there are no duplicates (i.e. $opt_testdeps does not contain

@@ -3,6 +3,7 @@ use warnings;
 
 use Test::More;
 use Test::Exception;
+use Path::Class qw/dir/;
 
 use lib qw(t/lib);
 use DBICTest;
@@ -14,8 +15,15 @@ BEGIN {
     unless DBIx::Class::Optional::Dependencies->req_ok_for ('deploy')
 }
 
-use File::Spec;
-use Path::Class qw/dir/;
+local $ENV{DBI_DSN};
+
+# this is how maint/gen_schema did it (connect() to force a storage
+# instance, but no conninfo)
+# there ought to be more code like this in the wild
+like(
+  DBICTest::Schema->connect->deployment_statements('SQLite'),
+  qr/\bCREATE TABLE\b/i
+);
 
 lives_ok( sub {
     my $parse_schema = DBICTest->init_schema(no_deploy => 1);
@@ -35,9 +43,9 @@ $schema->create_ddl_dir( undef, undef, $test_dir_1 );
 ok( -d $test_dir_1, 'create_ddl_dir did a make_path on its target dir' );
 ok( scalar( glob $test_dir_1.'/*.sql' ), 'there are sql files in there' );
 
-TODO: {
-    local $TODO = 'we should probably add some tests here for actual deployability of the DDL?';
-    ok( 0 );
+{
+  local $TODO = 'we should probably add some tests here for actual deployability of the DDL?';
+  ok( 0 );
 }
 
 END {

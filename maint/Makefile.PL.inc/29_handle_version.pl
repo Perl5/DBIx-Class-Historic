@@ -16,10 +16,14 @@ if ($v_maj != 0 or $v_min > 8) {
   die "Illegal version $version_string - we are still in the 0.08 cycle\n"
 }
 
+if ($v_point >= 300) {
+  die "Illegal version $version_string - we are still in the 0.082xx cycle\n"
+}
 
-# all odd releases *after* 0.08200 generate a -TRIAL, no exceptions
-Meta->makemaker_args->{DISTVNAME} = Meta->name . "-$version_string-TRIAL"
-  if ( $v_point > 200 and int($v_point / 100) % 2 );
+Meta->makemaker_args->{DISTVNAME} = Meta->name . "-$version_string-TRIAL" if (
+  # all odd releases *after* 0.08200 generate a -TRIAL, no exceptions
+  ( $v_point > 200 and int($v_point / 100) % 2 )
+);
 
 
 my $tags = { map { chomp $_; $_ => 1} `git tag` };

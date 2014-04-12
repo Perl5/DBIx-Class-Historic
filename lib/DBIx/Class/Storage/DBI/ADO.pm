@@ -1,10 +1,14 @@
 package DBIx::Class::Storage::DBI::ADO;
 
+use warnings;
+use strict;
+
 use base 'DBIx::Class::Storage::DBI';
 use mro 'c3';
 
 use Sub::Name;
 use Try::Tiny;
+use DBIx::Class::_Util 'sigwarn_silencer';
 use namespace::clean;
 
 =head1 NAME
@@ -19,43 +23,16 @@ should be transparent to the user.
 
 =cut
 
-sub _rebless {
-  my $self = shift;
-
-  my $dbtype = $self->_dbh_get_info('SQL_DBMS_NAME');
-
-  if (not $dbtype) {
-    warn "Unable to determine ADO driver, failling back to generic support.\n";
-    return;
-  }
-
-  $dbtype =~ s/\W/_/gi;
-
-  my $subclass = "DBIx::Class::Storage::DBI::ADO::${dbtype}";
-
-  return if $self->isa($subclass);
-
-  if ($self->load_optional_class($subclass)) {
-    bless $self, $subclass;
-    $self->_rebless;
-  }
-  else {
-    warn "Expected driver '$subclass' not found, using generic support. " .
-         "Please file an RT.\n";
-  }
-}
+sub _rebless { shift->_determine_connector_driver('ADO') }
 
 # cleanup some warnings from DBD::ADO
 # RT#65563, not fixed as of DBD::ADO v2.98
 sub _dbh_get_info {
   my $self = shift;
 
-  my $warn_handler = $SIG{__WARN__} || sub { warn @_ };
-
-  local $SIG{__WARN__} = sub {
-    $warn_handler->(@_)
-      unless $_[0] =~ m{^Missing argument in sprintf at \S+/ADO/GetInfo\.pm};
-  };
+  local $SIG{__WARN__} = sigwarn_silencer(
+    qr{^Missing argument in sprintf at \S+/ADO/GetInfo\.pm}
+  );
 
   $self->next::method(@_);
 }
@@ -73,11 +50,9 @@ sub _init {
       my $disconnect = *DBD::ADO::db::disconnect{CODE};
 
       *DBD::ADO::db::disconnect = subname 'DBD::ADO::db::disconnect' => sub {
-        my $warn_handler = $SIG{__WARN__} || sub { warn @_ };
-        local $SIG{__WARN__} = sub {
-          $warn_handler->(@_)
-            unless $_[0] =~ /Not a Win32::OLE object|uninitialized value/;
-        };
+        local $SIG{__WARN__} = sigwarn_silencer(
+          qr/Not a Win32::OLE object|uninitialized value/
+        );
         $disconnect->(@_);
       };
     }
@@ -88,7 +63,7 @@ sub _init {
 
 # Here I was just experimenting with ADO cursor types, left in as a comment in
 # case you want to as well. See the DBD::ADO docs.
-#sub _dbh_sth {
+#sub _prepare_sth {
 #  my ($self, $dbh, $sql) = @_;
 #
 #  my $sth = $self->disable_sth_caching

@@ -50,7 +50,6 @@ lives_ok (sub {
           ON producer_2.producerid = cd_to_producer_2.producer
         JOIN artist artist ON artist.artistid = me.artist
       WHERE ( ( producer.name = ? AND producer_2.name = ? ) )
-      ORDER BY me.cdid
     )',
     [
       [ { sqlt_datatype => 'varchar', dbic_colname => 'producer.name', sqlt_size => 100 }
@@ -79,7 +78,9 @@ cmp_ok(scalar($rs3->all), '==', 15, "All cds for artist returned");
 
 cmp_ok($rs3->count, '==', 15, "All cds for artist returned via count");
 
-my $rs4 = $schema->resultset("CD")->search({ 'artist.artistid' => '1' }, { join => ['tracks', 'artist'], prefetch => 'artist' });
+my $rs4 = $schema->resultset("CD")->search({ 'artist.artistid' => '1' }, {
+  join => ['tracks', 'artist'], prefetch => 'artist', order_by => 'me.cdid'
+});
 my @rs4_results = $rs4->all;
 
 is($rs4_results[0]->cdid, 1, "correct artist returned");

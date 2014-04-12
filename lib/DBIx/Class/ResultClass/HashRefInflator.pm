@@ -30,7 +30,7 @@ DBIx::Class::ResultClass::HashRefInflator - Get raw hashrefs from a resultset
 
 DBIx::Class is faster than older ORMs like Class::DBI but it still isn't
 designed primarily for speed. Sometimes you need to quickly retrieve the data
-from a massive resultset, while skipping the creation of fancy row objects.
+from a massive resultset, while skipping the creation of fancy result objects.
 Specifying this class as a C<result_class> for a resultset will change C<< $rs->next >>
 to return a plain data hash-ref (or a list of such hash-refs if C<< $rs->all >> is used).
 
@@ -66,37 +66,26 @@ my $mk_hash;
 $mk_hash = sub {
 
   my $hash = {
+
     # the main hash could be an undef if we are processing a skipped-over join
     $_[0] ? %{$_[0]} : (),
 
     # the second arg is a hash of arrays for each prefetched relation
-    map {
-      ref $_[1]->{$_}[0] eq 'ARRAY' # multi rel or not?
-        ? ( $_ => [ map
-            { $mk_hash->(@$_) || () }
-            @{$_[1]->{$_}}
-        ] )
-        : ( $_ => $mk_hash->( @{$_[1]->{$_}} ) )
+    map { $_ => (
 
-    } ( $_[1] ? ( keys %{$_[1]} ) : () )
+      # null-branch or not
+      ref $_[1]->{$_} eq $DBIx::Class::ResultSource::RowParser::Util::null_branch_class
+
+        ? ref $_[1]->{$_}[0] eq 'ARRAY' ? [] : undef
+
+        : ref $_[1]->{$_}[0] eq 'ARRAY'
+          ? [ map { $mk_hash->( @$_ ) || () } @{$_[1]->{$_}} ]
+          : $mk_hash->( @{$_[1]->{$_}} )
+
+    ) } ($_[1] ? keys %{$_[1]} : ())
   };
 
-  # if there is at least one defined column *OR* we are at the root of
-  # the resultset - consider the result real (and not an emtpy has_many
-  # rel containing one empty hashref)
-  # an empty arrayref is an empty multi-sub-prefetch - don't consider
-  # those either
-  return $hash if $_[2];
-
-  for (values %$hash) {
-    return $hash if (
-      defined $_
-        and
-      (ref $_ ne 'ARRAY' or scalar @$_)
-    );
-  }
-
-  return undef;
+  ($_[2] || keys %$hash) ? $hash : undef;
 };
 
 =head1 METHODS

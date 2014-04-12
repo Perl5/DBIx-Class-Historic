@@ -37,7 +37,7 @@ also define your arguments, such as which balancer you want and any arguments
 that the Pool object should get.
 
   my $schema = Schema::Class->clone;
-  $schema->storage_type( ['::DBI::Replicated', {balancer=>'::Random'}] );
+  $schema->storage_type(['::DBI::Replicated', { balancer_type => '::Random' }]);
   $schema->connection(...);
 
 Next, you need to add in the Replicants.  Basically this is an array of
@@ -317,8 +317,6 @@ my $method_dispatch = {
     sql_maker_class
     _execute
     _do_query
-    _sth
-    _dbh_sth
     _dbh_execute
   /, Class::MOP::Class->initialize('DBIx::Class::Storage::DBIHacks')->get_method_list ],
   reader => [qw/
@@ -332,14 +330,17 @@ my $method_dispatch = {
     _arm_global_destructor
     _verify_pid
 
-    source_bind_attributes
-
     get_use_dbms_capability
     set_use_dbms_capability
     get_dbms_capability
     set_dbms_capability
     _dbh_details
     _dbh_get_info
+
+    _determine_connector_driver
+    _extract_driver_from_connect_info
+    _describe_connection
+    _warn_undetermined_driver
 
     sql_limit_dialect
     sql_quote_char
@@ -357,7 +358,8 @@ my $method_dispatch = {
     _is_binary_type
     _is_text_lob_type
 
-    sth
+    _prepare_sth
+    _bind_sth_params
   /,(
     # the capability framework
     # not sure if CMOP->initialize does evil things to DBIC::S::DBI, fix if a problem
@@ -396,7 +398,7 @@ if (DBIx::Class::_ENV_::DBICTEST) {
 for my $method (@{$method_dispatch->{unimplemented}}) {
   __PACKAGE__->meta->add_method($method, sub {
     my $self = shift;
-    $self->throw_exception("$method must not be called on ".(blessed $self).' objects');
+    $self->throw_exception("$method() must not be called on ".(blessed $self).' objects');
   });
 }
 
@@ -444,6 +446,11 @@ C<pool_type>, C<pool_args>, C<balancer_type> and C<balancer_args>.
 
 around connect_info => sub {
   my ($next, $self, $info, @extra) = @_;
+
+  $self->throw_exception(
+    'connect_info can not be retrieved from a replicated storage - '
+  . 'accessor must be called on a specific pool instance'
+  ) unless defined $info;
 
   my $merge = Hash::Merge->new('LEFT_PRECEDENT');
 
@@ -637,8 +644,8 @@ around connect_replicants => sub {
 
 =head2 all_storages
 
-Returns an array of of all the connected storage backends.  The first element
-in the returned array is the master, and the remainings are each of the
+Returns an array of all the connected storage backends.  The first element
+in the returned array is the master, and the rest are each of the
 replicants.
 
 =cut
@@ -1073,7 +1080,7 @@ sub _get_server_version {
 Due to the fact that replicants can lag behind a master, you must take care to
 make sure you use one of the methods to force read queries to a master should
 you need realtime data integrity.  For example, if you insert a row, and then
-immediately re-read it from the database (say, by doing $row->discard_changes)
+immediately re-read it from the database (say, by doing $result->discard_changes)
 or you insert a row and then immediately build a query that expects that row
 to be an item, you should force the master to handle reads.  Otherwise, due to
 the lag, there is no certainty your data will be in the expected state.
@@ -1085,9 +1092,9 @@ method to force the master to handle all read queries.
 Otherwise, you can force a single query to use the master with the 'force_pool'
 attribute:
 
-  my $row = $resultset->search(undef, {force_pool=>'master'})->find($pk);
+  my $result = $resultset->search(undef, {force_pool=>'master'})->find($pk);
 
-This attribute will safely be ignore by non replicated storages, so you can use
+This attribute will safely be ignored by non replicated storages, so you can use
 the same code for both types of systems.
 
 Lastly, you can use the L</execute_reliably> method, which works very much like
@@ -1111,8 +1118,8 @@ using the Schema clone method.
 
 Based on code originated by:
 
-  Norbert Csongr·di <bert@cpan.org>
-  Peter SiklÛsi <einon@einon.hu>
+  Norbert Csongr√°di <bert@cpan.org>
+  Peter Sikl√≥si <einon@einon.hu>
 
 =head1 LICENSE
 

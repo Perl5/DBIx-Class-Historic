@@ -2,11 +2,13 @@ use strict;
 use warnings;
 
 use Test::More;
+use Test::Warn;
 use Test::Exception;
 use Scalar::Util ();
 
 use lib qw(t/lib);
 use DBICTest;
+use DBIx::Class::_Util 'sigwarn_silencer';
 
 BEGIN {
   require DBIx::Class;
@@ -21,10 +23,21 @@ BEGIN {
 
   my @schemas = (
     create_schema ({ schema => $s }),
-    create_schema ({ args => { parser_args => { 'DBIx::Class::Schema' => $s } } }),
-    create_schema ({ args => { parser_args => { 'DBIx::Schema' => $s } } }),
-    create_schema ({ args => { parser_args => { package => $s } } }),
+    create_schema ({ args => { parser_args => { dbic_schema => $s } } }),
   );
+
+  for my $parser_args_key (qw(
+    DBIx::Class::Schema
+    DBIx::Schema
+    package
+  )) {
+    warnings_exist {
+      push @schemas, create_schema({
+        args => { parser_args => { $parser_args_key => $s } }
+      });
+    } qr/\Qparser_args => {\E.+?is deprecated.+\Q@{[__FILE__]}/,
+    "deprecated crazy parser_arg '$parser_args_key' warned";
+  }
 
   Scalar::Util::weaken ($s);
 
@@ -37,6 +50,47 @@ BEGIN {
 # make sure classname-style works
 lives_ok { isa_ok (create_schema ({ schema => 'DBICTest::Schema' }), 'SQL::Translator::Schema', 'SQLT schema object produced') };
 
+# make sure a connected instance passed via $args does not get the $dbh improperly serialized
+SKIP: {
+
+  # YAML is a build_requires dep of SQLT - it may or may not be here
+  eval { require YAML } or skip "Test requires YAML.pm", 1;
+
+  lives_ok {
+
+    my $s = DBICTest->init_schema(no_populate => 1);
+    ok ($s->storage->connected, '$schema instance connected');
+
+    # roundtrip through YAML
+    my $yaml_rt_schema = SQL::Translator->new(
+      parser => 'SQL::Translator::Parser::YAML'
+    )->translate(
+      data => SQL::Translator->new(
+        parser_args => { dbic_schema => $s },
+        parser => 'SQL::Translator::Parser::DBIx::Class',
+        producer => 'SQL::Translator::Producer::YAML',
+      )->translate
+    );
+
+    isa_ok ( $yaml_rt_schema, 'SQL::Translator::Schema', 'SQLT schema object produced after YAML roundtrip');
+
+    ok ($s->storage->connected, '$schema instance still connected');
+  }
+
+  eval <<'EOE' or die $@;
+  END {
+    # we are in END - everything remains global
+    #
+    $^W = 1;  # important, otherwise DBI won't trip the next fail()
+    $SIG{__WARN__} = sub {
+      fail "Unexpected global destruction warning"
+        if $_[0] =~ /is not a DBI/;
+      warn @_;
+    };
+  }
+EOE
+
+}
 
 my $schema = DBICTest->init_schema( no_deploy => 1 );
 
@@ -165,10 +219,9 @@ lives_ok (sub {
   lives_ok (sub {
     my $sqlt_schema = do {
 
-      local $SIG{__WARN__} = sub {
-        warn @_
-          unless $_[0] =~ /Ignoring relationship .+ related resultsource .+ is not registered with this schema/
-      };
+      local $SIG{__WARN__} = sigwarn_silencer(
+        qr/Ignoring relationship .+ related resultsource .+ is not registered with this schema/
+      );
 
       create_schema({ schema => $partial_schema });
     };
@@ -211,7 +264,6 @@ done_testing;
 sub create_schema {
   my $args = shift;
 
-  my $schema = $args->{schema};
   my $additional_sqltargs = $args->{args} || {};
 
   my $sqltargs = {
@@ -224,7 +276,9 @@ sub create_schema {
   my $sqlt = SQL::Translator->new( $sqltargs );
 
   $sqlt->parser('SQL::Translator::Parser::DBIx::Class');
-  return $sqlt->translate({ data => $schema }) || die $sqlt->error;
+  return $sqlt->translate(
+    $args->{schema} ? ( data => $args->{schema} ) : ()
+  ) || die $sqlt->error;
 }
 
 sub get_table {

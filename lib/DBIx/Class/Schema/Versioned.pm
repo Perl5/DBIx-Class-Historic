@@ -109,7 +109,7 @@ Downgrades in addition to upgrades
 
 =item *
 
-Multiple sql files files per upgrade/downgrade/install
+Multiple sql files per upgrade/downgrade/install
 
 =item *
 
@@ -298,7 +298,7 @@ sub create_upgrade_path {
 
 =over 4
 
-=item Returns: a list of version numbers, ordered from lowest to highest
+=item Return Value: a list of version numbers, ordered from lowest to highest
 
 =back
 
@@ -757,10 +757,9 @@ sub _source_exists
 1;
 
 
-=head1 AUTHORS
+=head1 AUTHOR AND CONTRIBUTORS
 
-Jess Robinson <castaway@desert-island.me.uk>
-Luke Saunders <luke@shadowcatsystems.co.uk>
+See L<AUTHOR|DBIx::Class/AUTHOR> and L<CONTRIBUTORS|DBIx::Class/CONTRIBUTORS> in DBIx::Class
 
 =head1 LICENSE
 

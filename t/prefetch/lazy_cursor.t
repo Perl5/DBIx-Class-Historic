@@ -2,6 +2,7 @@ use strict;
 use warnings;
 
 use Test::More;
+use Test::Warn;
 use Test::Exception;
 use lib qw(t/lib);
 use DBICTest;
@@ -61,13 +62,28 @@ $rs->next;
 my @objs = $rs->all;
 is (@objs, $initial_artists_cnt + 3, '->all resets everything correctly');
 is ( ($rs->cursor->next)[0], 1, 'Cursor auto-rewound after all()');
-is ($rs->{stashed_rows}, undef, 'Nothing else left in $rs stash');
+is ($rs->{_stashed_rows}, undef, 'Nothing else left in $rs stash');
 
 my $unordered_rs = $rs->search({}, { order_by => 'cds.title' });
-ok ($unordered_rs->next, 'got row 1');
+
+warnings_exist {
+  ok ($unordered_rs->next, 'got row 1');
+} qr/performed an eager cursor slurp underneath/, 'Warned on auto-eager cursor';
+
 is_deeply ([$unordered_rs->cursor->next], [], 'Nothing left on cursor, eager slurp');
 ok ($unordered_rs->next, "got row $_")  for (2 .. $initial_artists_cnt + 3);
 is ($unordered_rs->next, undef, 'End of RS reached');
 is ($unordered_rs->next, undef, 'End of RS not lost');
+
+{
+  my $non_uniquely_ordered_constrained = $schema->resultset('CD')->search(
+    { artist => 1 },
+    { order_by => [qw( me.genreid me.title me.year )], prefetch => 'tracks' },
+  );
+
+  isa_ok ($non_uniquely_ordered_constrained->next, 'DBICTest::CD' );
+
+  ok( defined $non_uniquely_ordered_constrained->cursor->next, 'Cursor not exhausted' );
+}
 
 done_testing;

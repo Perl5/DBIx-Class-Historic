@@ -124,7 +124,7 @@ Advice on next storage to add the autovalidation.  We have this broken out so
 that it's easier to break out the auto validation into a role.
 
 This also returns the master in the case that none of the replicants are active
-or just just forgot to create them :)
+or just forgot to create them :)
 
 =cut
 
@@ -239,7 +239,7 @@ sub _get_forced_pool {
   } elsif(my $replicant = $self->pool->replicants->{$forced_pool}) {
     return $replicant;
   } else {
-    $self->master->throw_exception("$forced_pool is not a named replicant.");
+    $self->master->throw_exception("'$forced_pool' is not a named replicant.");
   }
 }
 

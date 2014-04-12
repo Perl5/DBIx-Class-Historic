@@ -4,6 +4,11 @@ BEGIN {
     print "1..0 # SKIP your perl does not support ithreads\n";
     exit 0;
   }
+
+  if ($INC{'Devel/Cover.pm'}) {
+    print "1..0 # SKIP Devel::Cover does not work with threads yet\n";
+    exit 0;
+  }
 }
 use threads;
 
@@ -11,14 +16,14 @@ use strict;
 use warnings;
 use Test::More;
 
+use lib qw(t/lib);
+use DBICTest;
+
 plan skip_all => 'DBIC does not actively support threads before perl 5.8.5'
   if $] < '5.008005';
 
-plan skip_all => 'test dangerous on Win32 for < 5.14 set TEST_AUTHOR to run'
-  if $^O eq 'MSWin32' && $] < 5.014 && !$ENV{TEST_AUTHOR};
-
-use lib qw(t/lib);
-use DBICTest;
+plan skip_all => 'Potential problems on Win32 Perl < 5.14 and Variable::Magic - investigation pending'
+  if $^O eq 'MSWin32' && $] < 5.014 && DBICTest::RunMode->is_plain;
 
 # README: If you set the env var to a number greater than 10,
 #   we will use that many children

@@ -5,9 +5,9 @@ use strict;
 use warnings;
 
 use DBIx::Class::Carp;
-use Sub::Name qw/subname/;
-use Scalar::Util qw/blessed/;
-
+use Sub::Name 'subname';
+use Scalar::Util 'blessed';
+use DBIx::Class::_Util 'fail_on_internal_wantarray';
 use namespace::clean;
 
 our %_pod_inherit_config =
@@ -63,7 +63,6 @@ EOW
     *$rs_meth_name = subname $rs_meth_name, sub {
       my $self = shift;
       my $attrs = @_ > 1 && ref $_[$#_] eq 'HASH' ? pop(@_) : {};
-      my @args = ($f_rel, @_ > 0 ? @_ : undef, { %{$rel_attrs||{}}, %$attrs });
       my $rs = $self->search_related($rel)->search_related(
         $f_rel, @_ > 0 ? @_ : undef, { %{$rel_attrs||{}}, %$attrs }
       );
@@ -72,6 +71,7 @@ EOW
 
     my $meth_name = join '::', $class, $meth;
     *$meth_name = subname $meth_name, sub {
+      DBIx::Class::_ENV_::ASSERT_NO_INTERNAL_WANTARRAY and wantarray and my $sog = fail_on_internal_wantarray($_[0]);
       my $self = shift;
       my $rs = $self->$rs_meth( @_ );
       return (wantarray ? $rs->all : $rs);

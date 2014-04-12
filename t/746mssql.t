@@ -4,17 +4,13 @@ use warnings;
 use Test::More;
 use Test::Exception;
 use Try::Tiny;
-use DBIx::Class::SQLMaker::LimitDialects;
-use DBIx::Class::Optional::Dependencies ();
-use lib qw(t/lib);
-use DBICTest;
-use DBIC::SqlMakerTest;
 
+use DBIx::Class::Optional::Dependencies ();
 plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_mssql_odbc')
   unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_mssql_odbc');
 
-my $OFFSET = DBIx::Class::SQLMaker::LimitDialects->__offset_bindtype;
-my $TOTAL  = DBIx::Class::SQLMaker::LimitDialects->__total_bindtype;
+use lib qw(t/lib);
+use DBICTest;
 
 my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_MSSQL_ODBC_${_}" } qw/DSN USER PASS/};
 
@@ -75,7 +71,7 @@ for my $opts_name (keys %opts) {
     }
     catch {
       if ($opts{$opts_name}{required}) {
-        BAIL_OUT "on_connect_call option '$opts_name' is not functional: $_";
+        die "on_connect_call option '$opts_name' is not functional: $_";
       }
       else {
         skip
@@ -251,7 +247,7 @@ SQL
         my $test_type = "Dialect:$dialect Quoted:$quoted";
 
         # basic limit support
-        TODO: {
+        {
           my $art_rs = $schema->resultset ('Artist');
           $art_rs->delete;
           $art_rs->create({ name => 'Artist ' . $_ }) for (1..6);
@@ -372,33 +368,11 @@ SQL
           },
         );
 
-        my ($sql, @bind) = @${$owners->page(3)->as_query};
-        # not testing the SQL as it is quite different between top/rno
-        is_same_bind (
-          \@bind,
-          [
-            [ { dbic_colname => 'test' }
-              => 'xxx' ],
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'me.name' }
-              => 'somebogusstring' ],
-
-            ($dialect eq 'Top'
-              ? [ { dbic_colname => 'test' } => 'xxx' ]  # the extra re-order bind
-              : ([ $OFFSET => 7 ], [ $TOTAL => 9 ]) # parameterised RNO
-            ),
-
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'me.name' }
-              => 'somebogusstring' ],
-            [ { dbic_colname => 'test' }
-              => 'xxx' ],
-          ],
-        );
-
         is ($owners->page(1)->all, 3, "$test_type: has_many prefetch returns correct number of rows");
         is ($owners->page(1)->count, 3, "$test_type: has-many prefetch returns correct count");
 
         is ($owners->page(3)->count, 2, "$test_type: has-many prefetch returns correct count");
-        TODO: {
+        {
           local $TODO = "Top-limit does not work when your limit ends up past the resultset"
             if $dialect eq 'Top';
           is ($owners->page(3)->all, 2, "$test_type: has_many prefetch returns correct number of rows");
@@ -421,38 +395,11 @@ SQL
           },
         );
 
-        ($sql, @bind) = @${$books->page(3)->as_query};
-        # not testing the SQL as it is quite different between top/rno
-        is_same_bind (
-          \@bind,
-          [
-            # inner
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'owner.name' }
-              => 'wiggle' ],
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'owner.name' }
-              => 'woggle' ],
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' }
-              => 'Library' ],
-            [ { dbic_colname => 'test' }
-              => '1' ],
-
-            # rno(?)
-            $dialect ne 'Top' ? ( [ $OFFSET => 5 ], [ $TOTAL => 6 ] ) : (),
-            # outer
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'owner.name' }
-              => 'wiggle' ],
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'owner.name' }
-              => 'woggle' ],
-            [ { sqlt_datatype => 'varchar', sqlt_size => 100, dbic_colname => 'source' }
-              => 'Library' ],
-          ],
-        );
-
         is ($books->page(1)->all, 2, "$test_type: Prefetched grouped search returns correct number of rows");
         is ($books->page(1)->count, 2, "$test_type: Prefetched grouped search returns correct count");
 
         is ($books->page(2)->count, 1, "$test_type: Prefetched grouped search returns correct count");
-        TODO: {
+        {
           local $TODO = "Top-limit does not work when your limit ends up past the resultset"
             if $dialect eq 'Top';
           is ($books->page(2)->all, 1, "$test_type: Prefetched grouped search returns correct number of rows");
@@ -522,7 +469,7 @@ CREATE TABLE money_test (
 SQL
       });
 
-      TODO: {
+      {
         my $freetds_and_dynamic_cursors = 1
           if $opts_name eq 'use_dynamic_cursors' &&
             $schema->storage->_using_freetds;

@@ -86,4 +86,24 @@ for my $s (qw/a2a artw cd artw_back/) {
   is_same_sql_bind ($rs->as_query, $q{$s}{query}, "$s resultset unmodified (as_query matches)" );
 }
 
+# ensure nothing pollutes the attrs of an existing rs
+{
+  my $fresh = $schema->resultset('CD');
+
+  isa_ok ($fresh->find(1), 'DBICTest::CD' );
+  isa_ok ($fresh->single({ cdid => 1}), 'DBICTest::CD' );
+  isa_ok ($fresh->search({ cdid => 1})->next, 'DBICTest::CD' );
+  is ($fresh->count({ cdid => 1}), 1 );
+  is ($fresh->count_rs({ cdid => 1})->next, 1 );
+
+  ok (! exists $fresh->{cursor}, 'Still no cursor on fresh rs');
+  ok (! exists $fresh->{_attrs}{_last_sqlmaker_alias_map}, 'aliasmap did not leak through' );
+
+  my $n = $fresh->next;
+
+  # check that we are not testing for deprecated slotnames
+  ok ($fresh->{cursor}, 'Cursor at expected slot after fire');
+  ok (exists $fresh->{_attrs}{_last_sqlmaker_alias_map}, 'aliasmap at expected slot after fire' );
+}
+
 done_testing;

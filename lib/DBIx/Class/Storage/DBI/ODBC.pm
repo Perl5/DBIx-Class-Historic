@@ -4,31 +4,12 @@ use warnings;
 use base qw/DBIx::Class::Storage::DBI/;
 use mro 'c3';
 
-sub _rebless {
-  my ($self) = @_;
+use DBIx::Class::_Util 'modver_gt_or_eq';
+use namespace::clean;
 
-  if (my $dbtype = $self->_dbh_get_info('SQL_DBMS_NAME')) {
-    # Translate the backend name into a perl identifier
-    $dbtype =~ s/\W/_/gi;
-    my $subclass = "DBIx::Class::Storage::DBI::ODBC::${dbtype}";
+sub _rebless { shift->_determine_connector_driver('ODBC') }
 
-    return if $self->isa($subclass);
-
-    if ($self->load_optional_class($subclass)) {
-      bless $self, $subclass;
-      $self->_rebless;
-    }
-    else {
-      warn "Expected driver '$subclass' not found, using generic support. " .
-           "Please file an RT.\n";
-    }
-  }
-  else {
-    warn "Could not determine your database type, using generic support.\n";
-  }
-}
-
-# Whether or not we are connecting via the freetds ODBC driver.
+# Whether or not we are connecting via the freetds ODBC driver
 sub _using_freetds {
   my $self = shift;
 
@@ -55,11 +36,17 @@ sub _disable_odbc_array_ops {
   my $self = shift;
   my $dbh  = $self->_get_dbh;
 
-  if (eval { DBD::ODBC->VERSION('1.35_01') }) {
-    $dbh->{odbc_array_operations} = 0;
-  }
-  elsif (eval { DBD::ODBC->VERSION('1.33_01') }) {
-    $dbh->{odbc_disable_array_operations} = 1;
+  $DBD::ODBC::__DBIC_DISABLE_ARRAY_OPS_VIA__ ||= [ do {
+    if( modver_gt_or_eq('DBD::ODBC', '1.35_01') ) {
+      odbc_array_operations => 0;
+    }
+    elsif( modver_gt_or_eq('DBD::ODBC', '1.33_01') ) {
+      odbc_disable_array_operations => 1;
+    }
+  }];
+
+  if (my ($k, $v) = @$DBD::ODBC::__DBIC_DISABLE_ARRAY_OPS_VIA__) {
+    $dbh->{$k} = $v;
   }
 }
 

@@ -91,6 +91,13 @@ is (
   'insert returning capability guessed correctly'
 );
 
+isa_ok (DBICTest::Schema->connect($dsn, $user, $pass)->storage->sql_maker, 'DBIx::Class::SQLMaker::Oracle');
+
+# see if determining a driver with bad credentials throws propely
+throws_ok {
+  DBICTest::Schema->connect($dsn, "BORKED BORKED USER $user", $pass)->storage->sql_maker;
+} qr/DBI Connection failed/;
+
 ##########
 # the recyclebin (new for 10g) sometimes comes in the way
 my $on_connect_sql = $v >= 10 ? ["ALTER SESSION SET recyclebin = OFF"] : [];
@@ -472,7 +479,7 @@ sub _run_tests {
     #   http://download.oracle.com/docs/cd/A87860_01/doc/server.817/a76961/ch294.htm#993
     # Oracle Database Reference 10g Release 2 (10.2)
     #   http://download.oracle.com/docs/cd/B19306_01/server.102/b14237/statviews_2107.htm#sthref1297
-    local $TODO = "On Oracle8i all_triggers view is empty, i don't yet know why..."
+    todo_skip "On Oracle8i all_triggers view is empty, i don't yet know why...", 1
       if $schema->storage->_server_info->{normalized_dbms_version} < 9;
 
     my $schema2 = $schema->connect($dsn2, $user2, $pass2, $opt);
@@ -481,7 +488,7 @@ sub _run_tests {
     # create identically named tables/sequences in the other schema
     do_creates($dbh2, $q);
 
-    # grand select privileges to the 2nd user
+    # grant select privileges to the 2nd user
     $dbh->do("GRANT INSERT ON ${q}artist${q} TO " . uc $user2);
     $dbh->do("GRANT SELECT ON ${q}artist${q} TO " . uc $user2);
     $dbh->do("GRANT SELECT ON ${q}artist_pk_seq${q} TO " . uc $user2);
@@ -543,6 +550,26 @@ sub _run_tests {
 
     do_clean ($dbh2);
   }}
+
+# test driver determination issues that led to the diagnosis/fix in 37b5ab51
+# observed side-effect when count-is-first on a fresh env-based connect
+  {
+    local $ENV{DBI_DSN};
+    ($ENV{DBI_DSN}, my @user_pass_args) = @{ $schema->storage->connect_info };
+    my $s2 = DBICTest::Schema->connect( undef, @user_pass_args );
+    ok (! $s2->storage->connected, 'Not connected' );
+    is (ref $s2->storage, 'DBIx::Class::Storage::DBI', 'Undetermined driver' );
+
+    ok (
+      $s2->resultset('Artist')->search({ 'me.name' => { like => '%' } }, { prefetch => 'cds' })->count,
+      'Some artist count'
+    );
+    ok (
+      scalar $s2->resultset('CD')->search({}, { join => 'tracks' } )->all,
+      'Some cds returned'
+    );
+    $s2->storage->disconnect;
+  }
 
   do_clean ($dbh);
 }

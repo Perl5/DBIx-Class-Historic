@@ -75,7 +75,7 @@ lot later.
 
 =item .. use DBIx::Class across multiple databases?
 
-If your database server allows you to run querys across multiple
+If your database server allows you to run queries across multiple
 databases at once, then so can DBIx::Class. All you need to do is make
 sure you write the database name as part of the
 L<DBIx::Class::ResultSource/table> call. Eg:
@@ -242,15 +242,7 @@ documentation for details.
 To use an SQL function on the left hand side of a comparison you currently need
 to resort to literal SQL:
 
- ->search( \[ 'YEAR(date_of_birth) = ?', [ plain_value => 1979 ] ] );
-
-Note: the C<plain_value> string in the C<< [ plain_value => 1979 ] >> part
-should be either the same as the name of the column (do this if the type of the
-return value of the function is the same as the type of the column) or in the
-case of a function it's currently treated as a dummy string (it is a good idea
-to use C<plain_value> or something similar to convey intent). The value is
-currently only significant when handling special column types (BLOBs, arrays,
-etc.), but this may change in the future.
+ ->search( \[ 'YEAR(date_of_birth) = ?', 1979 ] );
 
 =item .. find more help on constructing searches?
 
@@ -320,9 +312,9 @@ in the cookbook can do the same if you pass a C<rows> attribute to the search.
 
 Use L<DBIx::Class::Row/discard_changes>.
 
-  $row->discard_changes
+  $result->discard_changes
 
-Discarding changes and refreshing from storage are two sides fo the same coin.  When you
+Discarding changes and refreshing from storage are two sides of the same coin.  When you
 want to discard your local changes, just re-fetch the row from storage.  When you want
 to get a new, fresh copy of the row, just re-fetch the row from storage.
 L<DBIx::Class::Row/discard_changes> does just that by re-fetching the row from storage
@@ -351,7 +343,7 @@ C<count> on the resultset will only return the total number in the page.
 =item .. insert a row with an auto incrementing primary key?
 
 This happens automatically. After
-L<creating|DBIx::Class::ResultSet/create> a row object, the primary
+L<creating|DBIx::Class::ResultSet/create> a result object, the primary
 key value created by your database can be fetched by calling C<id> (or
 the access of your primary key column) on the object.
 
@@ -392,17 +384,17 @@ object. To fetch the new value, use the C<discard_changes> method on
 the Row.
 
   # will return the scalar reference:
-  $row->somecolumn()
+  $result->somecolumn()
 
   # issue a select using the PK to re-fetch the row data:
-  $row->discard_changes();
+  $result->discard_changes();
 
   # Now returns the correct new value:
-  $row->somecolumn()
+  $result->somecolumn()
 
 To update and refresh at once, chain your calls:
 
-  $row->update({ 'somecolumn' => { -ident => 'othercolumn' } })->discard_changes;
+  $result->update({ 'somecolumn' => { -ident => 'othercolumn' } })->discard_changes;
 
 =item .. store JSON/YAML in a column and have it deflate/inflate automatically?
 
@@ -497,17 +489,17 @@ An another method is to use L<Moose> with your L<DBIx::Class> package.
 
 	__PACKAGE__->table('foo'); # etc
 
-With either of these methods the resulting use of the accesssor would be
+With either of these methods the resulting use of the accessor would be
 
-	my $row;
+	my $result;
 
-	# assume that somewhere in here $row will get assigned to a MyTable row
+	# assume that somewhere in here $result will get assigned to a MyTable row
 
-	$row->non_column_data('some string'); # would set the non_column_data accessor
+	$result->non_column_data('some string'); # would set the non_column_data accessor
 
 	# some other stuff happens here
 
-	$row->update(); # would not inline the non_column_data accessor into the update
+	$result->update(); # would not inline the non_column_data accessor into the update
 
 
 =item How do I use DBIx::Class objects in my TT templates?
@@ -536,7 +528,7 @@ L<DBIx::Class> runs the actual SQL statement as late as possible, thus
 if you create a resultset using C<search> in scalar context, no query
 is executed. You can create further resultset refinements by calling
 search again or relationship accessors. The SQL query is only run when
-you ask the resultset for an actual row object.
+you ask the resultset for an actual result object.
 
 =item How do I deal with tables that lack a primary key?
 
@@ -556,7 +548,7 @@ Look at the tips in L<DBIx::Class::Manual::Cookbook/"STARTUP SPEED">
 =item How do I reduce the overhead of database queries?
 
 You can reduce the overhead of object creation within L<DBIx::Class>
-using the tips in L<DBIx::Class::Manual::Cookbook/"Skip row object creation for faster results">
+using the tips in L<DBIx::Class::Manual::Cookbook/"Skip result object creation for faster results">
 and L<DBIx::Class::Manual::Cookbook/"Get raw data for blindingly fast results">
 
 =item How do I override a run time method (e.g. a relationship accessor)?

@@ -47,9 +47,10 @@ if ($ENV{DBICTEST_IN_PERSISTENT_ENV}) {
 
 use lib qw(t/lib);
 use DBICTest::RunMode;
-use DBICTest::Util qw/populate_weakregistry assert_empty_weakregistry/;
+use DBICTest::Util::LeakTracer qw(populate_weakregistry assert_empty_weakregistry visit_refs);
+use Scalar::Util qw(weaken blessed reftype);
 use DBIx::Class;
-use B 'svref_2object';
+use DBIx::Class::_Util qw(hrefaddr sigwarn_silencer);
 BEGIN {
   plan skip_all => "Your perl version $] appears to leak like a sieve - skipping test"
     if DBIx::Class::_ENV_::PEEPEENESS;
@@ -88,7 +89,7 @@ unless (DBICTest::RunMode->is_plain) {
     # re-populate the registry while checking it, ewwww!)
     return $obj if (ref $obj) =~ /^TB2::/;
 
-    # weaken immediately to avoid weird side effects
+    # populate immediately to avoid weird side effects
     return populate_weakregistry ($weak_registry, $obj );
   };
 
@@ -116,15 +117,12 @@ unless (DBICTest::RunMode->is_plain) {
   %$weak_registry = ();
 }
 
-my @compose_ns_classes;
 {
   use_ok ('DBICTest');
 
   my $schema = DBICTest->init_schema;
   my $rs = $schema->resultset ('Artist');
   my $storage = $schema->storage;
-
-  @compose_ns_classes = map { "DBICTest::${_}" } keys %{$schema->source_registrations};
 
   ok ($storage->connected, 'we are connected');
 
@@ -217,9 +215,6 @@ my @compose_ns_classes;
   my $getcol_rs = $cds_rs->get_column('me.cdid');
   my $pref_getcol_rs = $cds_with_stuff->get_column('me.cdid');
 
-  # fire the column getters
-  my @throwaway = $pref_getcol_rs->all;
-
   my $base_collection = {
     resultset => $rs,
 
@@ -242,8 +237,8 @@ my @compose_ns_classes;
     get_column_rs_pref => $pref_getcol_rs,
 
     # twice so that we make sure only one H::M object spawned
-    chained_resultset => $rs->search_rs ({}, { '+columns' => [ 'foo' ] } ),
-    chained_resultset2 => $rs->search_rs ({}, { '+columns' => [ 'bar' ] } ),
+    chained_resultset => $rs->search_rs ({}, { '+columns' => { foo => 'artistid' } } ),
+    chained_resultset2 => $rs->search_rs ({}, { '+columns' => { bar => 'artistid' } } ),
 
     row_object => $row_obj,
 
@@ -257,8 +252,42 @@ my @compose_ns_classes;
 
     leaky_resultset => $rs_bind_circref,
     leaky_resultset_cond => $cond_rowobj,
-    leaky_resultset_member => $rs_bind_circref->next,
   };
+
+  # fire all resultsets multiple times, once here, more below
+  # some of these can't find anything (notably leaky_resultset)
+  my @rsets = grep {
+    blessed $_
+      and
+    (
+      $_->isa('DBIx::Class::ResultSet')
+        or
+      $_->isa('DBIx::Class::ResultSetColumn')
+    )
+  } values %$base_collection;
+
+
+  my $fire_resultsets = sub {
+    local $ENV{DBIC_COLUMNS_INCLUDE_FILTER_RELS} = 1;
+    local $SIG{__WARN__} = sigwarn_silencer(
+      qr/Unable to deflate 'filter'-type relationship 'artist'.+related object primary key not retrieved/
+    );
+
+    map
+      { $_, (blessed($_) ? { $_->get_columns } : ()) }
+      map
+        { $_->all }
+        @rsets
+    ;
+  };
+
+  push @{$base_collection->{random_results}}, $fire_resultsets->();
+
+  # FIXME - something throws a Storable for a spin if we keep
+  # the results in-collection. The same problem is seen above,
+  # swept under the rug back in 0a03206a, damned lazy ribantainer
+{
+  local $base_collection->{random_results};
 
   require Storable;
   %$base_collection = (
@@ -273,6 +302,87 @@ my @compose_ns_classes;
     fresh_pager => $rs->page(5)->pager,
     pager => $pager,
   );
+}
+
+  # FIXME - ideally this kind of collector ought to be global, but attempts
+  # with an invasive debugger-based tracer did not quite work out... yet
+  # Manually scan the innards of everything we have in the base collection
+  # we assembled so far (skip the DT madness below) *recursively*
+  #
+  # Only do this when we do have the bits to look inside CVs properly,
+  # without it we are liable to pick up object defaults that are locked
+  # in method closures
+  if (DBICTest::Util::LeakTracer::CV_TRACING) {
+    visit_refs(
+      refs => [ $base_collection ],
+      action => sub {
+        populate_weakregistry ($weak_registry, $_[0]);
+        1;  # true means "keep descending"
+      },
+    );
+
+    # do a heavy-duty fire-and-compare loop on all resultsets
+    # this is expensive - not running on install
+    my $typecounts = {};
+    if (
+      ! DBICTest::RunMode->is_plain
+        and
+      ! $ENV{DBICTEST_IN_PERSISTENT_ENV}
+        and
+      # FIXME - investigate wtf is going on with 5.18
+      ! ( $] > 5.017 and $ENV{DBIC_TRACE_PROFILE} )
+    ) {
+
+      # FIXME - ideally we should be able to just populate an alternative
+      # registry, subtract everything from the main one, and arrive at
+      # an "empty" resulting hash
+      # However due to gross inefficiencies in the ::ResultSet code we
+      # end up recalculating a new set of aliasmaps which could have very
+      # well been cached if it wasn't for... anyhow
+      # What we do here for the time being is similar to the lazy approach
+      # of Devel::LeakTrace - we just make sure we do not end up with more
+      # reftypes than when we started. At least we are not blanket-counting
+      # SVs like D::LT does, but going by reftype... sigh...
+
+      for (values %$weak_registry) {
+        if ( my $r = reftype($_->{weakref}) ) {
+          $typecounts->{$r}--;
+        }
+      }
+
+      # For now we can only reuse the same registry, see FIXME above/below
+      #for my $interim_wr ({}, {}) {
+      for my $interim_wr ( ($weak_registry) x 4 ) {
+
+        visit_refs(
+          refs => [ $fire_resultsets->(), @rsets ],
+          action => sub {
+            populate_weakregistry ($interim_wr, $_[0]);
+            1;  # true means "keep descending"
+          },
+        );
+
+        # FIXME - this is what *should* be here
+        #
+        ## anything we have seen so far is cool
+        #delete @{$interim_wr}{keys %$weak_registry};
+        #
+        ## moment of truth - the rest ought to be gone
+        #assert_empty_weakregistry($interim_wr);
+      }
+
+      for (values %$weak_registry) {
+        if ( my $r = reftype($_->{weakref}) ) {
+          $typecounts->{$r}++;
+        }
+      }
+    }
+
+    for (keys %$typecounts) {
+      fail ("Amount of $_ refs changed by $typecounts->{$_} during resultset mass-execution")
+        if ( abs ($typecounts->{$_}) > 1 ); # there is a pad caught somewhere, the +1/-1 can be ignored
+    }
+  }
 
   if ($has_dt) {
     my $rs = $base_collection->{icdt_rs} = $schema->resultset('Event');
@@ -292,15 +402,6 @@ my @compose_ns_classes;
   # dbh's are created in XS space, so pull them separately
   for ( grep { defined } map { @{$_->{ChildHandles}} } values %{ {DBI->installed_drivers()} } ) {
     $base_collection->{"DBI handle $_"} = $_;
-  }
-
-  SKIP: {
-    if ( DBIx::Class::Optional::Dependencies->req_ok_for ('test_leaks') ) {
-      Test::Memory::Cycle::memory_cycle_ok ($base_collection, 'No cycles in the object collection')
-    }
-    else {
-      skip 'Circular ref test needs ' .  DBIx::Class::Optional::Dependencies->req_missing_for ('test_leaks'), 1;
-    }
   }
 
   populate_weakregistry ($weak_registry, $base_collection->{$_}, "basic $_")
@@ -345,85 +446,70 @@ my @compose_ns_classes;
 
 # Naturally we have some exceptions
 my $cleared;
-for my $slot (keys %$weak_registry) {
-  if ($slot =~ /^Test::Builder/) {
+for my $addr (keys %$weak_registry) {
+  my $names = join "\n", keys %{$weak_registry->{$addr}{slot_names}};
+
+  if ($names =~ /^Test::Builder/m) {
     # T::B 2.0 has result objects and other fancyness
-    delete $weak_registry->{$slot};
+    delete $weak_registry->{$addr};
   }
-  elsif ($slot =~ /^Method::Generate::(?:Accessor|Constructor)/) {
-    # Moo keeps globals around, this is normal
-    delete $weak_registry->{$slot};
-  }
-  elsif ($slot =~ /^SQL::Translator/) {
-    # SQLT is a piece of shit, leaks all over
-    delete $weak_registry->{$slot};
-  }
-  elsif ($slot =~ /^Hash::Merge/) {
+  elsif ($names =~ /^Hash::Merge/m) {
     # only clear one object of a specific behavior - more would indicate trouble
-    delete $weak_registry->{$slot}
-      unless $cleared->{hash_merge_singleton}{$weak_registry->{$slot}{weakref}{behavior}}++;
+    delete $weak_registry->{$addr}
+      unless $cleared->{hash_merge_singleton}{$weak_registry->{$addr}{weakref}{behavior}}++;
   }
   elsif (
-    $slot =~ /^Data::Dumper/
-      and
-    $weak_registry->{$slot}{stacktrace} =~ /\QDBIx::Class::ResultSource::RowParser::_mk_row_parser/
+#    # if we can look at closed over pieces - we will register it as a global
+#    !DBICTest::Util::LeakTracer::CV_TRACING
+#      and
+    $names =~ /^SQL::Translator::Generator::DDL::SQLite/m
   ) {
-    # there should be only one D::D object (used to construct the rowparser)
-    # more would indicate trouble
-    delete $weak_registry->{$slot}
-      unless $cleared->{mk_row_parser_dd_singleton}++;
+    # SQLT::Producer::SQLite keeps global generators around for quoted
+    # and non-quoted DDL, allow one for each quoting style
+    delete $weak_registry->{$addr}
+      unless $cleared->{sqlt_ddl_sqlite}->{@{$weak_registry->{$addr}{weakref}->quote_chars}}++;
   }
-  elsif (DBIx::Class::_ENV_::INVISIBLE_DOLLAR_AT and $slot =~ /^__TxnScopeGuard__FIXUP__/) {
-    delete $weak_registry->{$slot}
-  }
-  elsif ($slot =~ /^DateTime::TimeZone/) {
-    # DT is going through a refactor it seems - let it leak zones for now
-    delete $weak_registry->{$slot};
-  }
-}
-
-# every result class has a result source instance as classdata
-# make sure these are all present and distinct before ignoring
-# (distinct means only 1 reference)
-for my $rs_class (
-  'DBICTest::BaseResult',
-  @compose_ns_classes,
-  map { DBICTest::Schema->class ($_) } DBICTest::Schema->sources
-) {
-  # need to store the SVref and examine it separately, to push the rsrc instance off the pad
-  my $SV = svref_2object($rs_class->result_source_instance);
-  is( $SV->REFCNT, 1, "Source instance of $rs_class referenced exactly once" );
-
-  # ignore it
-  delete $weak_registry->{$rs_class->result_source_instance};
-}
-
-# Schema classes also hold sources, but these are clones, since
-# each source contains the schema (or schema class name in this case)
-# Hence the clone so that the same source can be registered with
-# multiple schemas
-for my $moniker ( keys %{DBICTest::Schema->source_registrations || {}} ) {
-
-  my $SV = svref_2object(DBICTest::Schema->source($moniker));
-  is( $SV->REFCNT, 1, "Source instance registered under DBICTest::Schema as $moniker referenced exactly once" );
-
-  delete $weak_registry->{DBICTest::Schema->source($moniker)};
 }
 
 # FIXME !!!
 # There is an actual strong circular reference taking place here, but because
-# half of it is in XS no leaktracer sees it, and Devel::FindRef is equally
-# stumped when trying to trace the origin. The problem is:
+# half of it is in XS, so it is a bit harder to track down (it stumps D::FR)
+# (our tracker does not yet do it, but it'd be nice)
+# The problem is:
 #
-# $cond_object --> result_source --> schema --> storage --> $dbh --> {cached_kids}
+# $cond_object --> result_source --> schema --> storage --> $dbh --> {CachedKids}
 #          ^                                                           /
 #           \-------- bound value on prepared/cached STH  <-----------/
 #
-TODO: {
-  local $TODO = 'Not sure how to fix this yet, an entanglment could be an option';
-  my $r = $weak_registry->{'basic leaky_resultset_cond'}{weakref};
-  ok(! defined $r, 'We no longer leak!')
-    or $r->result_source(undef);
+{
+  my @circreffed;
+
+  for my $r (map
+    { $_->{weakref} }
+    grep
+      { $_->{slot_names}{'basic leaky_resultset_cond'} }
+      values %$weak_registry
+  ) {
+    local $TODO = 'Needs Data::Entangled or somesuch - see RT#82942';
+    ok(! defined $r, 'Self-referential RS conditions no longer leak!')
+      or push @circreffed, $r;
+  }
+
+  if (@circreffed) {
+    is (scalar @circreffed, 1, 'One resultset expected to leak');
+
+    # this is useless on its own, it is to showcase the circref-diag
+    # and eventually test it when it is operational
+    local $TODO = 'Needs Data::Entangled or somesuch - see RT#82942';
+    while (@circreffed) {
+      weaken (my $r = shift @circreffed);
+
+      populate_weakregistry( (my $mini_registry = {}), $r );
+      assert_empty_weakregistry( $mini_registry );
+
+      $r->result_source(undef);
+    }
+  }
 }
 
 assert_empty_weakregistry ($weak_registry);
@@ -468,8 +554,11 @@ SKIP: {
   require IPC::Open2;
 
   for my $type (keys %$persistence_tests) { SKIP: {
-      skip "$type module not found", 1
-        unless eval "require $type";
+    unless (eval "require $type") {
+      # Don't terminate what we didn't start
+      delete $persistence_tests->{$type}{termcmd};
+      skip "$type module not found", 1;
+    }
 
     my @cmd = @{$persistence_tests->{$type}{cmd}};
 
@@ -513,6 +602,7 @@ END {
   unless ($ENV{DBICTEST_IN_PERSISTENT_ENV}) {
     close $_ for (*STDIN, *STDOUT, *STDERR);
     local $?; # otherwise test will inherit $? of the system()
-    system (@{$persistence_tests->{PPerl}{termcmd}});
+    system (@{$persistence_tests->{PPerl}{termcmd}})
+      if $persistence_tests->{PPerl}{termcmd};
   }
 }

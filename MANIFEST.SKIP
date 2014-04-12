@@ -26,3 +26,8 @@
 \.orig$
 \.rej$
 
+lib/DBIx/Class/Manual/ResultClass.pod.proto
+maint/.Generated_Pod
+
+maint/travis-ci_scripts
+.travis.yml

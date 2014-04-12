@@ -10,7 +10,8 @@ use base 'DBICTest::BaseSchema';
 use Fcntl qw/:DEFAULT :seek :flock/;
 use Time::HiRes 'sleep';
 use DBICTest::RunMode;
-use DBICTest::Util qw/populate_weakregistry assert_empty_weakregistry local_umask/;
+use DBICTest::Util::LeakTracer qw/populate_weakregistry assert_empty_weakregistry/;
+use DBICTest::Util 'local_umask';
 use namespace::clean;
 
 __PACKAGE__->mk_group_accessors(simple => 'custom_attr');
@@ -73,7 +74,7 @@ our $locker;
 END {
   # we need the $locker to be referenced here for delayed destruction
   if ($locker->{lock_name} and ($ENV{DBICTEST_LOCK_HOLDER}||0) == $$) {
-    #warn "$$ $0 $locktype LOCK RELEASED";
+    #warn "$$ $0 $locker->{type} LOCK RELEASED";
   }
 }
 
@@ -143,20 +144,18 @@ sub connection {
       ;
     };
 
-
     # Never hold more than one lock. This solves the "lock in order" issues
     # unrelated tests may have
     # Also if there is no connection - there is no lock to be had
     if ($locktype and (!$locker or $locker->{type} ne $locktype)) {
 
-      warn "$$ $0 $locktype" if (
-        ($locktype eq 'generic' or $locktype eq 'SQLite')
-          and
-        DBICTest::RunMode->is_author
-      );
+      # this will release whatever lock we may currently be holding
+      # which is fine since the type does not match as checked above
+      undef $locker;
 
-      my $lockpath = DBICTest::RunMode->tmpdir->file(".dbictest_$locktype.lock");
+      my $lockpath = DBICTest::RunMode->tmpdir->file("_dbictest_$locktype.lock");
 
+      #warn "$$ $0 $locktype GRABBING LOCK";
       my $lock_fh;
       {
         my $u = local_umask(0); # so that the file opens as 666, and any user can lock

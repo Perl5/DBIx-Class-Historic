@@ -16,9 +16,10 @@ use Sub::Name();
 use Data::Dumper::Concise 'Dumper';
 use Try::Tiny;
 use Context::Preserve 'preserve_context';
+use DBIx::Class::_Util 'sigwarn_silencer';
 use namespace::clean;
 
-__PACKAGE__->sql_limit_dialect ('RowCountOrGenericSubQ');
+__PACKAGE__->sql_limit_dialect ('GenericSubQ');
 __PACKAGE__->sql_quote_char ([qw/[ ]/]);
 __PACKAGE__->datetime_parser_type(
   'DBIx::Class::Storage::DBI::Sybase::ASE::DateTime::Format'
@@ -180,9 +181,8 @@ sub disconnect {
 # "active statement" warning on disconnect, which we throw away here.
 # This is due to the bug described in insert_bulk.
 # Currently a noop because 'prepare' is used instead of 'prepare_cached'.
-  local $SIG{__WARN__} = sub {
-    warn $_[0] unless $_[0] =~ /active statement/i;
-  } if $self->_is_bulk_storage;
+  local $SIG{__WARN__} = sigwarn_silencer(qr/active statement/i)
+    if $self->_is_bulk_storage;
 
 # so that next transaction gets a dbh
   $self->_began_bulk_work(0) if $self->_is_bulk_storage;
@@ -254,14 +254,15 @@ sub _is_lob_column {
 }
 
 sub _prep_for_execute {
-  my $self = shift;
-  my ($op, $ident) = @_;
+  my ($self, $op, $ident, $args) = @_;
 
   #
 ### This is commented out because all tests pass. However I am leaving it
 ### here as it may prove necessary (can't think through all combinations)
 ### BTW it doesn't currently work exactly - need better sensitivity to
   # currently set value
+  #
+  #my ($op, $ident) = @_;
   #
   # inherit these from the parent for the duration of _prep_for_execute
   # Don't know how to make a localizing loop with if's, otherwise I would
@@ -272,7 +273,20 @@ sub _prep_for_execute {
   #  = $self->_parent_storage->_perform_autoinc_retrieval
   #if ($op eq 'insert' or $op eq 'update') and $self->_parent_storage;
 
-  my ($sql, $bind) = $self->next::method (@_);
+  my $limit;  # extract and use shortcut on limit without offset
+  if ($op eq 'select' and ! $args->[4] and $limit = $args->[3]) {
+    $args = [ @$args ];
+    $args->[3] = undef;
+  }
+
+  my ($sql, $bind) = $self->next::method($op, $ident, $args);
+
+  # $limit is already sanitized by now
+  $sql = join( "\n",
+    "SET ROWCOUNT $limit",
+    $sql,
+    "SET ROWCOUNT 0",
+  ) if $limit;
 
   if (my $identity_col = $self->_perform_autoinc_retrieval) {
     $sql .= "\n" . $self->_fetch_identity_sql($ident, $identity_col)
@@ -322,8 +336,6 @@ sub _native_data_type {
 
 sub _execute {
   my $self = shift;
-  my ($op) = @_;
-
   my ($rv, $sth, @bind) = $self->next::method(@_);
 
   $self->_identity( ($sth->fetchall_arrayref)->[0][0] )
@@ -736,7 +748,7 @@ sub _update_blobs {
   my ($self, $source, $blob_cols, $where) = @_;
 
   my @primary_cols = try
-    { $source->_pri_cols }
+    { $source->_pri_cols_or_die }
     catch {
       $self->throw_exception("Cannot update TEXT/IMAGE column(s): $_")
     };
@@ -771,7 +783,7 @@ sub _insert_blobs {
 
   my %row = %$row;
   my @primary_cols = try
-    { $source->_pri_cols }
+    { $source->_pri_cols_or_die }
     catch {
       $self->throw_exception("Cannot update TEXT/IMAGE column(s): $_")
     };
@@ -1021,9 +1033,9 @@ For example, this will not work:
 
   $schema->txn_do(sub {
     my $rs = $schema->resultset('Book');
-    while (my $row = $rs->next) {
+    while (my $result = $rs->next) {
       $schema->resultset('MetaData')->create({
-        book_id => $row->id,
+        book_id => $result->id,
         ...
       });
     }

@@ -117,7 +117,12 @@ almost like you would define a regular ResultSource.
 
   __PACKAGE__->table_class('DBIx::Class::ResultSource::View');
 
-  # ->table, ->add_columns, etc.
+  # For the time being this is necessary even for virtual views
+  __PACKAGE__->table($view_name);
+
+  #
+  # ->add_columns, etc.
+  #
 
   # do not attempt to deploy() this view
   __PACKAGE__->result_source_instance->is_virtual(1);
@@ -349,8 +354,8 @@ from, select, and +select attributes.
   my $rs = $cdrs->search({
     year => {
       '=' => $cdrs->search(
-        { artist_id => { '=' => { -ident => 'me.artist_id' } } },
-        { alias => 'inner' }
+        { artist_id => { -ident => 'me.artist_id' } },
+        { alias => 'sub_query' }
       )->get_column('year')->max_rs->as_query,
     },
   });
@@ -359,11 +364,11 @@ That creates the following SQL:
 
   SELECT me.cdid, me.artist, me.title, me.year, me.genreid, me.single_track
     FROM cd me
-   WHERE year = (
-      SELECT MAX(inner.year)
-        FROM cd inner
-       WHERE artist_id = me.artist_id
-      )
+  WHERE year = (
+    SELECT MAX(sub_query.year)
+      FROM cd sub_query
+    WHERE artist_id = me.artist_id
+  )
 
 =head2 Predefined searches
 
@@ -416,26 +421,26 @@ you create an index on the return value of the function in question.) However,
 it can be accomplished with C<DBIx::Class> when necessary by resorting to
 literal SQL:
 
-  $rs->search(\[ 'YEAR(date_of_birth) = ?', [ plain_value => 1979 ] ]);
+  $rs->search(
+    \[ 'YEAR(date_of_birth) = ?', 1979 ]
+  );
 
   # Equivalent SQL:
   # SELECT * FROM employee WHERE YEAR(date_of_birth) = ?
 
+To include the function as part of a larger search, use the '-and' keyword
+to collect the search conditions:
+
   $rs->search({ -and => [
     name => 'Bob',
-    \[ 'YEAR(date_of_birth) = ?', [ plain_value => 1979 ] ],
+    \[ 'YEAR(date_of_birth) = ?', 1979 ]
   ]});
 
   # Equivalent SQL:
   # SELECT * FROM employee WHERE name = ? AND YEAR(date_of_birth) = ?
 
-Note: the C<plain_value> string in the C<< [ plain_value => 1979 ] >> part
-should be either the same as the name of the column (do this if the type of the
-return value of the function is the same as the type of the column) or in the
-case of a function it's currently treated as a dummy string (it is a good idea
-to use C<plain_value> or something similar to convey intent). The value is
-currently only significant when handling special column types (BLOBs, arrays,
-etc.), but this may change in the future.
+Note: the syntax for specifying the bind value's datatype and value is
+explained in L<DBIx::Class::ResultSet/DBIC BIND VALUES>.
 
 See also L<SQL::Abstract/Literal SQL with placeholders and bind values
 (subqueries)>.
@@ -599,7 +604,7 @@ C<LinerNotes>:
   # SELECT cd.*, artist.*, liner_notes.* FROM cd
   # JOIN artist ON cd.artist = artist.id
   # JOIN liner_notes ON cd.id = liner_notes.cd
-  # WHERE artist.name = 'Bob Marley'
+  # WHERE artist.name = 'Bob Marley' AND liner_notes.notes LIKE '%some text%'
   # ORDER BY artist.name
 
 =head2 Multi-step joins
@@ -712,9 +717,9 @@ SQL statements:
 
 =head1 ROW-LEVEL OPERATIONS
 
-=head2 Retrieving a row object's Schema
+=head2 Retrieving a result object's Schema
 
-It is possible to get a Schema object from a row object like so:
+It is possible to get a Schema object from a result object like so:
 
   my $schema = $cd->result_source->schema;
   # use the schema as normal:
@@ -835,7 +840,7 @@ AKA multi-class object inflation from one table
 L<DBIx::Class> classes are proxy classes, therefore some different
 techniques need to be employed for more than basic subclassing.  In
 this example we have a single user table that carries a boolean bit
-for admin.  We would like like to give the admin users
+for admin.  We would like to give the admin users
 objects (L<DBIx::Class::Row>) the same methods as a regular user but
 also special admin only methods.  It doesn't make sense to create two
 separate proxy-class files for this.  We would be copying all the user
@@ -959,7 +964,7 @@ B<Test File> test.pl
 Alternatively you can use L<DBIx::Class::DynamicSubclass> that implements
 exactly the above functionality.
 
-=head2 Skip row object creation for faster results
+=head2 Skip result object creation for faster results
 
 DBIx::Class is not built for speed, it's built for convenience and
 ease of use, but sometimes you just need to get the data, and skip the
@@ -1058,7 +1063,7 @@ See L<DBIx::Class::ResultSetColumn> for more documentation.
 
 =head2 Creating a result set from a set of rows
 
-Sometimes you have a (set of) row objects that you want to put into a
+Sometimes you have a (set of) result objects that you want to put into a
 resultset without the need to hit the DB again. You can do that by using the
 L<set_cache|DBIx::Class::Resultset/set_cache> method:
 
@@ -1103,7 +1108,7 @@ as follows:
 
 =head2 Filtering a relationship result set
 
-If you want to get a filtered result set, you can just add add to $attr as follows:
+If you want to get a filtered result set, you can just add to $attr as follows:
 
  __PACKAGE__->has_many('pages' => 'Page', 'book', { where => { scrap => 0 } } );
 
@@ -1158,14 +1163,14 @@ as each other and your connecting database user has the proper permissions to th
 To accomplish this one only needs to specify the DB schema name in the table
 declaration, like so...
 
-  package MyDatabase::Main::Artist;
+  package MyApp::Schema::Result::Artist;
   use base qw/DBIx::Class::Core/;
 
   __PACKAGE__->table('database1.artist'); # will use "database1.artist" in FROM clause
 
   __PACKAGE__->add_columns(qw/ artist_id name /);
   __PACKAGE__->set_primary_key('artist_id');
-  __PACKAGE__->has_many('cds' => 'MyDatabase::Main::Cd');
+  __PACKAGE__->has_many('cds' => 'MyApp::Schema::Result::Cd');
 
   1;
 
@@ -1178,10 +1183,10 @@ of your application to support a change lifecycle (e.g. DEV, TEST, PROD) and
 the DB schemas are named based on the environment (e.g. database1_dev).
 
 However, one can dynamically "map" to the proper DB schema by overriding the
-L<connection|DBIx::Class::Schama/connection> method in your Schema class and
+L<connection|DBIx::Class::Schema/connection> method in your Schema class and
 building a renaming facility, like so:
 
-  package MyDatabase::Schema;
+  package MyApp::Schema;
   use Moose;
 
   extends 'DBIx::Class::Schema';
@@ -1218,16 +1223,16 @@ building a renaming facility, like so:
 
   1;
 
-By overridding the L<connection|DBIx::Class::Schama/connection>
+By overriding the L<connection|DBIx::Class::Schema/connection>
 method and extracting a custom option from the provided \%attr hashref one can
 then simply iterate over all the Schema's ResultSources, renaming them as
 needed.
 
 To use this facility, simply add or modify the \%attr hashref that is passed to
-L<connection|DBIx::Class::Schama/connect>, as follows:
+L<connection|DBIx::Class::Schema/connect>, as follows:
 
   my $schema
-    = MyDatabase::Schema->connect(
+    = MyApp::Schema->connect(
       $dsn,
       $user,
       $pass,
@@ -1352,9 +1357,9 @@ row.
     });
   } catch {
     $exception = $_;
-  }
+  };
 
-  if ($caught) {
+  if ($exception) {
     # There was an error while handling the $job. Rollback all changes
     # since the transaction started, including the already committed
     # ('released') savepoints. There will be neither a new $job nor any
@@ -1732,7 +1737,7 @@ methods:
     numbers => [1, 2, 3]
   });
 
-  $row->update(
+  $result->update(
     {
       numbers => [1, 2, 3]
     },
@@ -1936,8 +1941,9 @@ just looking for this.
 For example, say that you have three columns, C<id>, C<number>, and
 C<squared>.  You would like to make changes to C<number> and have
 C<squared> be automagically set to the value of C<number> squared.
-You can accomplish this by wrapping the C<number> accessor with
-L<Class::Method::Modifiers>:
+You can accomplish this by wrapping the C<number> accessor with the C<around>
+method modifier, available through either L<Class::Method::Modifiers>,
+L<Moose|Moose::Manual::MethodModifiers> or L<Moose-like|Moo> modules):
 
   around number => sub {
     my ($orig, $self) = (shift, shift);
@@ -1948,7 +1954,7 @@ L<Class::Method::Modifiers>:
     }
 
     $self->$orig(@_);
-  }
+  };
 
 Note that the hard work is done by the call to C<< $self->$orig >>, which
 redispatches your call to store_column in the superclass(es).
@@ -2157,8 +2163,8 @@ L</Using joins and prefetch>.
 =item *
 
 Use L<populate|DBIx::Class::ResultSet/populate> in void context to insert data
-when you don't need the resulting L<DBIx::Class::Row> objects, if possible, but
-see the caveats.
+when you don't need the resulting L<result|DBIx::Class::Manual::ResultClass> objects,
+if possible, but see the caveats.
 
 When inserting many rows, for best results, populate a large number of rows at a
 time, but not so large that the table is locked for an unacceptably long time.
@@ -2184,7 +2190,7 @@ L<DBIx::Class|DBIx::Class> programs can have a significant startup delay
 as the ORM loads all the relevant classes. This section examines
 techniques for reducing the startup delay.
 
-These tips are are listed in order of decreasing effectiveness - so the
+These tips are listed in order of decreasing effectiveness - so the
 first tip, if applicable, should have the greatest effect on your
 application.
 
