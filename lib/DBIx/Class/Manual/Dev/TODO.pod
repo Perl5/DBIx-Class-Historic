@@ -51,7 +51,14 @@ People find C<belongs_to> and C<has_many> confusing.  RT#83712 has an initial
 attempt at renaming C<belongs_to> to C<refers_to>, which seems to be generally
 favoured; but it needs to be fleshed out for the other relationship types.
 
-*INSERT ACRANE's TABLE HERE*
+The possibilities in the current API are:
+
+  belongs_to                         "I refer to exactly 1 foreign row"
+  belongs_to, join_type => "left"    "I refer to 0 or 1 foreign rows"
+  has_many                           "0 or more foreign rows refer to me"
+  has_many, join_type => "inner"     "1 or more foreign rows refer to me"
+  might_have                         "0 or 1 foreign rows refer to me"
+  has_one                            "exactly one foreign row refers to me"
 
 The core issue is that while experienced users of DBIC understand it is just a
 "way to style the JOIN clause", for non-rdbms users this is just a "method
@@ -59,18 +66,87 @@ that does some magic to get me the right related stuff". Thus the inner/left
 and one/many individual combinations need to be preserved as individual methods.
 
 The proposal of refers_to fails to differentiate clearly the "non-belongs_to"
-cases. Consider:
+cases.
 
- refers_to / maybe_refers_to / referred_to / maybe_referred_to / many_refer_to
+The Swindon consensus for dealing with this is as follows:
 
-The proposal that was shot down in ~2010 by mst iirc was:
+=over 4
 
- owned_by / maybe_owned_by
+=item *
 
- maybe_owns_one / owns_one / owns_many
+The C<add_relationship> method gets an additional calling convention:
 
-While less clear on the *referential* part, it is very clear on the *direction*
-part, and imo is clearer to a non-DB person.
+    # Like old belongs_to:
+    $result_class->add_relationship($relationship_name, {
+        depends_on => $foreign_class,
+        required => 0, # default 1 for "depends_on"; inner join if true
+        cond => $column_or_code_hash_or_array,
+        # ... attributes ...
+    });
+
+    # Like old has_many:
+    $result_class->add_relationship($relationship_name, {
+        referenced_by => $foreign_class,
+        required => 1, # default 0 for "referenced_by"; inner join if true
+        cond => $column_or_code_hash_or_array,
+        # ... attributes ...
+    });
+
+    # Like old might_have (for required=>0) and has_one (for required=>1):
+    $result_class->add_relationship($relationship_name, {
+        referenced_by => $foreign_class,
+        required => 1, # default 0 for "uniquely_referenced_by"
+        cond => $column_or_code_hash_or_array,
+        # ... attributes ...
+    });
+
+This can be distinguished from the existing convention in two ways: it takes
+only two arguments, and the second is a hash ref rather than a string.
+
+Callers must supply exactly one of the C<depends_on>, C<referenced_by>, and
+C<uniquely_referenced_by> hash keys; an exception is thrown if that isn't true.
+
+The default for C<required> is applied when that key is missing or
+undefined.  Note that the default depends on the relationship type:
+C<depends_on> defaults to C<< required => 1 >> (like old C<belongs_to>), and
+the other types default to C<< required => 0 >> (like old C<has_many>).
+
+The new-style calls will delegate through C<belongs_to> and C<has_many>,
+because they may be overridden in extant codebases.
+
+A new attribute C<is_depends_on> is inferred from the relationship type when
+absent.  An exception is thrown if that attribute is present but does not
+match the relationship type.
+
+=item *
+
+Two new relationship-creation sugar methods get added:
+
+    $result_class->depends_on($rel_name, $foreign_class, $cond, $attrs);
+
+    $result_class->referenced_by($rel_name, $foreign_class, $cond, $attrs);
+
+The other possibilities (supplying a non-default value for C<required>, or
+using C<uniquely_referenced_by> at all) have no new sugar.  As far as we can
+tell, at least 75% of relationships are either C<depends_on> or
+C<referenced_by>, so these are the relationship types which stand to gain
+most from having simple sugar.  Combined with the difficulty of finding
+names which unambiguously distinguish the six possible cases, it seems
+reasonable for the less common cases to need a little more verbosity.
+
+=item *
+
+L<DBIx::Class::Schema::Loader> will be changed to emit C<depends_on> and
+C<referenced_by> calls where possible, and a new-style C<add_relationship>
+call in place of C<has_one>.
+
+=item *
+
+The following will ultimately be changed to warn that they're considered too
+confusing to use: C<belongs_to> with an explicit C<join_type>, and all uses of
+C<might_have> and C<has_one>.
+
+=back
 
 =head3 Cleanup/rewrite DBIx::Class::ResultSet::_merge_joinpref_attr()
 
