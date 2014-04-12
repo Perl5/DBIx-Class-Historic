@@ -2226,8 +2226,8 @@ case there are obviously no benefits to using this method over L</create>.
 
 sub populate {
   my $self = shift;
+  my $into_columns = $_[0]->[0];
 
-  # cruft placed in standalone method
   my $data = $self->_normalize_populate_args(@_);
 
   return unless @$data;
@@ -2237,15 +2237,13 @@ sub populate {
     return wantarray ? @created : \@created;
   }
   else {
-    my $first = $data->[0];
-
     # if a column is a registered relationship, and is a non-blessed hash/array, consider
     # it relationship data
     my (@rels, @columns);
     my $rsrc = $self->result_source;
     my $rels = { map { $_ => $rsrc->relationship_info($_) } $rsrc->relationships };
-    for (keys %$first) {
-      my $ref = ref $first->{$_};
+    for (@$into_columns) {
+      my $ref = ref $_;
       $rels->{$_} && ($ref eq 'ARRAY' or $ref eq 'HASH')
         ? push @rels, $_
         : push @columns, $_
@@ -2256,13 +2254,30 @@ sub populate {
 
     ## do the belongs_to relationships
     foreach my $index (0..$#$data) {
-
-      # delegate to create() for any dataset without primary keys with specified relationships
-      if (grep { !defined $data->[$index]->{$_} } @pks ) {
-        for my $r (@rels) {
-          if (grep { ref $data->[$index]{$r} eq $_ } qw/HASH ARRAY/) {  # a related set must be a HASH or AoH
-            my @ret = $self->populate($data);
-            return;
+      if (ref($data->[$index]) eq 'CODE') {
+        #FIXME: when coderefs get pushed from normalize_populate_args, they can get treated here
+      } elsif (ref($data->[$index]) eq 'REF' and ref(${$data->[$index]}) eq 'ARRAY') {
+        my $sql_maker = $self->result_source->schema->storage->sql_maker;
+        my $destination_table = $self->result_source->from;
+        $destination_table = (ref $destination_table) ? $$destination_table : $sql_maker->_quote($destination_table);
+        my @subselect = @{${$data->[$index]}};
+        my @quoted_columns = map { $sql_maker->_quote($_) } @columns;
+        # Strip off the leading and trailing parenthesis that as_query always puts
+        # on the query
+        $subselect[0] =~ s/^\(//;
+        $subselect[0] =~ s/\)$//;
+        $subselect[0] = "INSERT INTO $destination_table ( " . (join ",", @columns) . " ) " . $subselect[0];
+        
+        my $set = $self->result_source->schema->storage->dbh->do(@subselect);
+        next;
+      } else {
+        # delegate to create() for any dataset without primary keys with specified relationships
+        if (grep { !defined $data->[$index]->{$_} } @pks ) {
+          for my $r (@rels) {
+            if (grep { ref $data->[$index]{$r} eq $_ } qw/HASH ARRAY/) {  # a related set must be a HASH or AoH
+              my @ret = $self->populate($data);
+              return;
+            }
           }
         }
       }
@@ -2341,7 +2356,19 @@ sub _normalize_populate_args {
       my @ret;
       my @colnames = @{$arg->[0]};
       foreach my $values (@{$arg}[1 .. $#$arg]) {
-        push @ret, { map { $colnames[$_] => $values->[$_] } (0 .. $#colnames) };
+        if (ref $values eq 'ARRAY') {
+          push @ret, { map { $colnames[$_] => $values->[$_] } (0 .. $#colnames) };
+        } elsif (ref $values eq 'CODE') {
+          # FIXME: Riba says that this needs to be handed directly to DBI somehow
+          # Invoke the coderef until it returns undef. Normalize it, as it can return arrayrefs, hashrefs...
+          my $value = $values->();
+          while (defined $value) {
+            push @ret, @{ $self->_normalize_populate_args([$arg->[0], $value]) };
+            $value = $values->();
+          }
+        } else {
+          push @ret, $values;
+        }
       }
       return \@ret;
     }
@@ -3511,10 +3538,7 @@ sub _resolved_attrs {
       $join = $self->_merge_joinpref_attr( $join, $attrs->{prefetch} );
     }
 
-    $attrs->{from} =    # have to copy here to avoid corrupting the original
-      [
-        @{ $attrs->{from} },
-        $source->_resolve_join(
+    my @result = $source->_resolve_join(
           $join,
           $alias,
           { %{ $attrs->{seen_join} || {} } },
@@ -3522,7 +3546,16 @@ sub _resolved_attrs {
             ? $attrs->{from}[-1][0]{-join_path}
             : []
           ,
-        )
+        );
+    my @attributes = map { delete $_->[2] } @result;
+    # FIXME: there are more attributes than just the where that 
+    # we may want to consider.
+    my @where_clauses = map { $_->{where} } @attributes;
+    $attrs->{where} = $self->_stack_cond($attrs->{where}, @where_clauses) if @where_clauses;
+    $attrs->{from} =    # have to copy here to avoid corrupting the original
+      [
+        @{ $attrs->{from} },
+        @result,
       ];
   }
 
@@ -3715,18 +3748,33 @@ sub _rollout_hash {
 sub _calculate_score {
   my ($self, $a, $b) = @_;
 
+  # Return 0 if $a or $b is defined but not both.
   if (defined $a xor defined $b) {
     return 0;
   }
+  # Return 1 if $a is not defined.
   elsif (not defined $a) {
     return 1;
   }
 
+  # Can accept duplicates { -k => 1 }, { -k => 1 } but not 
+  # conflicts { -k => 1, $k => 2 }
+  my $check_conflicting_keys = sub { my ($h1, $h2, $k1, $k2) = @_; 
+    no warnings qw/ uninitialized /;
+    return 1 if ($k1) ne ($k2);
+    return 1 if $k1 !~ m/^-/;
+    return if ( ref($h1->{$k1})||ref($h2->{$k2}));
+    die "Conflicting keys $k1. $h1->{$k1} $h2->{$k1}" if ( $h1->{$k1} !~ m/^$h2->{$k2}$/ );
+    return 1;
+  };
+
+  # We only get here if both $a and $b are defined.
   if (ref $b eq 'HASH') {
     my ($b_key) = keys %{$b};
     if (ref $a eq 'HASH') {
       my ($a_key) = keys %{$a};
-      if ($a_key eq $b_key) {
+      if (($a_key||"") eq ($b_key||"")) {
+        $check_conflicting_keys->($a, $b, $a_key, $b_key);
         return (1 + $self->_calculate_score( $a->{$a_key}, $b->{$b_key} ));
       } else {
         return 0;
@@ -3744,8 +3792,21 @@ sub _calculate_score {
   }
 }
 
+# *****************************************************************
+#
+# _merge_joinpref_attr($orig, $import);
+#
+# Calls _rollout_attr for $orig
+# Calls _rollout_attr for $import
+# Calls _calculate_score to compare $orig and $import.
+# Recursively calls _merge_joinpref_attr tracking call depth.
+#
+# *****************************************************************
+
 sub _merge_joinpref_attr {
-  my ($self, $orig, $import) = @_;
+  my ($self, $orig, $import, $depth) = @_;
+
+  $depth ||= 0;
 
   return $import unless defined($orig);
   return $orig unless defined($import);
@@ -3777,13 +3838,14 @@ sub _merge_joinpref_attr {
         $orig->[$best_candidate->{position}] = $import_element;
       } elsif (ref $import_element eq 'HASH') {
         my ($key) = keys %{$orig_best};
-        $orig->[$best_candidate->{position}] = { $key => $self->_merge_joinpref_attr($orig_best->{$key}, $import_element->{$key}) };
+        $orig->[$best_candidate->{position}] = { $key => $self->_merge_joinpref_attr($orig_best->{$key}, $import_element->{$key}, $depth+1) };
       }
     }
     $seen_keys->{$import_key} = 1; # don't merge the same key twice
   }
 
-  return @$orig ? $orig : ();
+  return $orig->[0] if (scalar(@$orig)==1 && $depth>0);
+  return @$orig ? $orig : ({});
 }
 
 {

@@ -1,0 +1,360 @@
+package DBIx::Class::Manual::Dev::TODO;
+
+=head1 NAME
+
+DBIx::Class::Manual::Dev::TODO - TODO list of S through XXL tasks for eager
+young minds
+
+=head1 DESCRIPTION
+
+This document attempts to centralize the collective knowledge about various
+L<DBIx::Class> C<TODO> tasks, ranging from sketches of mundane bugfixes through
+minutes of heated design discussions all the way to design documents for
+future world domination.
+
+You can L<jump straight to the "small" LIST OF OUTSTANDING TASKS|/TODOs>.
+If, however, you plan to edit this document, please read the
+L</HOW TO EDIT THIS DOCUMENT> section first, as parts of this POD double as
+B<machine parseable> L<metadata|/Metadata>.
+
+=head2 Note for GitHub Users
+
+If you are visiting the DBIx-Class project on GitHub you may be surprised to
+find this unorthodox "README". What you are seeing is GitHb rendering a
+symlink pointing to the latest revision of
+L<DBIx::Class::Manual::Dev::TODO> in the currently selected git branch
+(normally C<master>). Fork this, hack away, and send us a pull request :)
+
+=head1 TODOs
+
+=for comment WHEN IN A BRANCH USE THIS BLOCK TO INDICATE MERGE REQUIREMENTS
+=head2 Branch Merge Requirements
+=head3 Reason 1
+=head3 Reason 2
+=head3 ...
+Delete the C<=for comment> line above, and replace this text with C<=head3>
+paragraphs detailing the reasons for this branch to exist.
+
+=head2 Refactoring / Cleanup / Architectural improvements
+
+=head3 Finally rename relationship helpers, deprecate belongs_to/has_many
+
+=over
+
+RT:83712
+
+NS
+
+=back
+
+People find C<belongs_to> and C<has_many> confusing.  RT#83712 has an initial
+attempt at renaming C<belongs_to> to C<refers_to>, which seems to be generally
+favoured; but it needs to be fleshed out for the other relationship types.
+
+The possibilities in the current API are:
+
+  belongs_to                         "I refer to exactly 1 foreign row"
+  belongs_to, join_type => "left"    "I refer to 0 or 1 foreign rows"
+  has_many                           "0 or more foreign rows refer to me"
+  has_many, join_type => "inner"     "1 or more foreign rows refer to me"
+  might_have                         "0 or 1 foreign rows refer to me"
+  has_one                            "exactly one foreign row refers to me"
+
+The core issue is that while experienced users of DBIC understand it is just a
+"way to style the JOIN clause", for non-rdbms users this is just a "method
+that does some magic to get me the right related stuff". Thus the inner/left
+and one/many individual combinations need to be preserved as individual methods.
+
+The proposal of refers_to fails to differentiate clearly the "non-belongs_to"
+cases.
+
+The Swindon consensus for dealing with this is as follows:
+
+=over 4
+
+=item *
+
+The C<add_relationship> method gets an additional calling convention:
+
+    # Like old belongs_to:
+    $result_class->add_relationship($relationship_name, {
+        depends_on => $foreign_class,
+        required => 0, # default 1 for "depends_on"; inner join if true
+        cond => $column_or_code_hash_or_array,
+        # ... attributes ...
+    });
+
+    # Like old has_many:
+    $result_class->add_relationship($relationship_name, {
+        referenced_by => $foreign_class,
+        required => 1, # default 0 for "referenced_by"; inner join if true
+        cond => $column_or_code_hash_or_array,
+        # ... attributes ...
+    });
+
+    # Like old might_have (for required=>0) and has_one (for required=>1):
+    $result_class->add_relationship($relationship_name, {
+        referenced_by => $foreign_class,
+        required => 1, # default 0 for "uniquely_referenced_by"
+        cond => $column_or_code_hash_or_array,
+        # ... attributes ...
+    });
+
+This can be distinguished from the existing convention in two ways: it takes
+only two arguments, and the second is a hash ref rather than a string.
+
+Callers must supply exactly one of the C<depends_on>, C<referenced_by>, and
+C<uniquely_referenced_by> hash keys; an exception is thrown if that isn't true.
+
+The default for C<required> is applied when that key is missing or
+undefined.  Note that the default depends on the relationship type:
+C<depends_on> defaults to C<< required => 1 >> (like old C<belongs_to>), and
+the other types default to C<< required => 0 >> (like old C<has_many>).
+
+The new-style calls will delegate through C<belongs_to> and C<has_many>,
+because they may be overridden in extant codebases.
+
+A new attribute C<is_depends_on> is inferred from the relationship type when
+absent.  An exception is thrown if that attribute is present but does not
+match the relationship type.
+
+=item *
+
+Two new relationship-creation sugar methods get added:
+
+    $result_class->depends_on($rel_name, $foreign_class, $cond, $attrs);
+
+    $result_class->referenced_by($rel_name, $foreign_class, $cond, $attrs);
+
+The other possibilities (supplying a non-default value for C<required>, or
+using C<uniquely_referenced_by> at all) have no new sugar.  As far as we can
+tell, at least 75% of relationships are either C<depends_on> or
+C<referenced_by>, so these are the relationship types which stand to gain
+most from having simple sugar.  Combined with the difficulty of finding
+names which unambiguously distinguish the six possible cases, it seems
+reasonable for the less common cases to need a little more verbosity.
+
+=item *
+
+L<DBIx::Class::Schema::Loader> will be changed to emit C<depends_on> and
+C<referenced_by> calls where possible, and a new-style C<add_relationship>
+call in place of C<has_one>.
+
+=item *
+
+The following will ultimately be changed to warn that they're considered too
+confusing to use: C<belongs_to> with an explicit C<join_type>, and all uses of
+C<might_have> and C<has_one>.
+
+=back
+
+=head3 Cleanup/rewrite DBIx::Class::ResultSet::_merge_joinpref_attr()
+
+This code is well tested (it even has a dedicated test file to just test its
+output, F<t/91merge_joinpref_attr.t>), however it is very weirdly written
+and hence hard to maintain. It will also need to learn about dash-prefxed
+hash keys being names in order to support L</Relationship arguments>.
+
+
+=head2 Warts / Cleanups / Deprecations
+
+=head3 Switch DBIx::Class::Admin and the dbicadmin utility to Moo
+
+Moose is slow. *Really* slow for CLI. We can do better.
+
+=head3 Replicated cleanup and Moo migration
+
+=head3 select/group_by/order_by clarify semantics
+
+=head3 txn_do opts/ dbh_do
+
+=head3 find_or_create claify (RT)
+
+=head2 Extensions / New Features
+
+=head3 -op and -func SQLA operators
+
+=over
+
+NS
+
+=back
+
+These are currently present in several forms in both the SQLA and the DBIC
+trees (neither of the branches has been merged yet). Frew is the author of
+pretty much all of this, and was supposed to clean things up leaving only
+one branch in the SQLA repo.
+
+The actual obstacle to merging this is the ambiguity of what happens on
+bindtype information clashes, and how does the bindtype propagate further
+down the callstack in case the C<-op/-func> are not the only thing in a RHS
+chain. So far it seems that the L<Data::Query's|/Data::Query migration>
+architecture is capable of sidestepping this issue entirely, but nobody has
+investigated this yet.
+
+=head3 Relationship arguments
+
+=over
+
+DEP:L</Cleanup/rewrite DBIx::Class::ResultSet::_merge_joinpref_attr()>
+
+=back
+
+Allow passing of relationship arguments for individual
+L<search|DBIx::Class::ResultSet/search> invocations. Currently proposed
+syntax is something like:
+
+  $cd_rs->search({}, {
+    join => [
+      {
+        artist => { -alias => 'ar', -join_type => 'left',
+          cds => {
+            tracks => { -alias => 'tr' },
+          },
+          paintings => {},
+        },
+        tracks => { -join_type => 'inner',
+          # example custom coderef relspec, args passed to it determine threshold
+          # of "platinum" to be reflected in the ON clause
+          # the -rel_args key does not yet exist (due to missing a way of passing it)
+          platinum_single_cd => { -rel_args => [...] }, 
+        },
+      },
+      { genre => { -alias => 'g' } },
+    ],
+  };
+
+The goal is to be able to modify any part of a join condition on the fly,
+allowing for much better flexibility. It will solve two of the most commonly
+requested issues "how do I change left to inner" (the current answer is
+"register a new relationship") and "how do I change the resulting alias"
+(there is currently no answer to this at all). Also will allow for a common
+infrastructure to pass options to custom relationship coderefs (the current
+practice is to have a pesky global somewhere that is local()ised to a
+certain value before the query takes place). Lastly it will allow explicit
+overriding of join conditions to take place on long nested left-join chains.
+The current (API consistent) behavior is to switch any join to left after a
+left join is encountered in the chain. This is done so that merely adding
+join/prefetch attributes will not affect the contents of the "left part" of
+the resultset.
+
+=head1 HOW TO EDIT THIS DOCUMENT
+
+Anyone (developer or not) is welcome and encouraged to extend and/or change
+this document. No idea is too small or too big, even a standalone C<=head3>
+is appreciated as it can serve as a seed for further discussion/writeup. The
+idea is to have a wiki-like process without the headaches of maintaining an
+actual wiki, and more importantly having the contents of said "wiki" always
+usable offline. If you are adding/modifying entries in this document, please
+try to follow the style of already existing TODOs. Also fill in as much
+information as possible, and don't hesitate to be overly technical - after
+all this document is intended for developers, and is expected to be quite
+large and in places quite complex. More info to filter out is B<invariably
+better> than having less than necessary and attempting to guess the rest.
+
+No attempt has been made yet to sort individual tasks in each TODO
+section, though ideas on how to do this for better readability are more
+than welcome.
+
+=head2 Todo section
+
+=head3 Branching and subsequent merging
+
+The L<TODO POD section|/Todo section> of the C<master> branch contains a
+commented-out C<=head2> titled I<Branch Merge Requirements> (it is the
+first C<=head2> following the L</TODOs> C<=head1>). When a branch is
+made, authors and/or reviewers should uncomment this heading and add
+notes on what work is still necessary before merging back to mainline.
+It is possible that after a merge the heading will not be reverted to
+its original form, however there is a sanity-check implemented by
+F<maint/dbic_todo> (and invoked bu the C<make dist> target) which will
+catch this to prevent CPAN dissemination (perhaps this particular bit
+warrants a git pre-commit hook protecting master?)
+
+=head2 Metadata
+
+To stay in the Perl-mandated laziness framework, this document doubles as a
+holder of metadata on the significance of individual issues. The
+F<maint/dbic_todo> script executed as part of C<make dist> will stop the
+dist-building process if it detects any unresolved issues as indicated
+below.
+
+Flags for each C<=head3> paragraph are declared as individual elements
+within an C<=over> / C<=back> block immediately following the C<=head3>.
+No POD markup is permitted for the flag-lines (no intermediate C<=item>
+elements). However each line is still separated by double-space (C<\n\n>)
+as required by the POD specification.
+
+The flags are simple key/value pairs with C<:> separating each key from its
+value. All flags supplied have their values aggregated in an arrayref. Both
+the separator C<:> and the value are optional. If a flag value is not
+supplied its value will be an empty arrayref. Each flag is identified by
+a short 2-3 letter id.
+
+Currently recognized flags (and their ids) are:
+
+=over
+
+=item * Blocker (BL)
+
+This is the most important flag. The value is the version at which the
+blocker goes in effect. If no value is specified, a "full blocker" is
+assumed - i.e. any release is blocked until this issue is resolved. The
+version is specified as a perl decimal only - e.g. C<0.08200>, without
+leading C<v> or other characters.  The distmaker aborts the creation of a
+tarball if a blocker is found for the version being currently packaged. The
+idea is to make it dead easy to answer the annoying question "Is master
+ready to release?".
+
+=item * Regression (RG)
+
+Indicates the issue is a known regression. Optionally indicates in which
+version the regression was first introduced. It is always preferred to
+have no known regressions, but in the real world drinking beer trumps chasing
+bugs, so some known regressions may remain unfixed for some (extended period
+of) time.
+
+=item * Depends (DEP)
+
+The fix for this issue depends on something else. You can use
+C<LE<lt>/[relevant issue head3 title]E<gt>> constructs to link to the proper
+issue if it is listed in this document.
+
+=item * RT_Entry (RT)
+
+The described TODO is a result of (or is independently described by) the RT
+ticket with the specified number. This flag serves only as a reminder for
+the maintainers to close the corresponding tickets when the issue is
+resolved.
+
+=item * Needs_Specification (NS)
+
+Indicates that this is just a floating idea that still needs an actual
+specification. Ideally such specification comes in the form of a branch,
+containing a set of failing tests indicating what things should eventually
+look like.
+
+=item * Request_For_Comments (RFC)
+
+Indicates the presence of a proof of concept (ideally some code with a
+passing/failing test demonstrating intended behavior), for which the
+original author is soliciting discussion from other developers before
+delving into cleaning this idea up for eventual merging.
+
+=item * Signed_Off (SIG)
+
+Indicates which core developers have signed-off on a particular idea/plan
+
+=item * ...
+
+If a (sensible) need arises for more flags - just add them :) Note that you
+will need to adjust the flag list in F<maint/dbic_todo> as well.
+
+=back
+
+It is important to note that this is a novel experiment in POD semantic
+overloading abuse, and as such the declaration, format and meaning of
+individual flags can and probably will be changed down the road. However,
+if this is to happen the body of text existing at the time will be
+properly recoded into the newly agreed upon style, and this instruction
+section will be updated as well.

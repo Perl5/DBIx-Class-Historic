@@ -991,8 +991,13 @@ sub _get_dbh {
   return $self->_dbh;
 }
 
+# *DELIBERATELY* not a setter (for the time being)
+# Too intertwined with everything else for any kind of sanity
 sub sql_maker {
-  my ($self) = @_;
+  my $self = shift;
+
+  $self->throw_exception('sql_maker() is not a setter method') if @_;
+
   unless ($self->_sql_maker) {
     my $sql_maker_class = $self->sql_maker_class;
 
@@ -1056,6 +1061,7 @@ sub _populate_dbh {
 
   $self->_dbh(undef); # in case ->connected failed we might get sent here
   $self->_dbh_details({}); # reset everything we know
+  $self->_sql_maker(undef); # this may also end up being different
 
   $self->_dbh($self->_connect);
 

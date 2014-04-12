@@ -1,0 +1,143 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin;
+use Getopt::Long ();
+use Devel::Dwarn;
+
+my $known_flags = { map { $_ => 1 } qw(
+
+)};
+
+my $todo_file = 'README.pod';
+
+my $getopt = Getopt::Long::Parser->new(
+  config => [qw/gnu_getopt bundling_override no_ignore_case pass_through/]
+);
+my $args = {
+  check_blockers => undef,
+};
+$getopt->getoptions($args, qw/
+  check_blockers|check-blockers
+/);
+if (@ARGV) {
+  warn "\nIgnoring unrecognized option(s): @ARGV\n\n";
+}
+
+print_todo( validate_todo( parse_todo("$FindBin::Bin/../$todo_file") ) );
+
+sub validate_todo {
+  my $todos = shift;
+
+  # Fixme - get to use $known_flags (or something)
+
+  # relink internal linkage
+  for my $t ( values %$todos ) {
+    if ( my $f = $t->{flags}{DEP} ) {
+      for ( 0 .. $#$f ) {
+        if ( $f->[$_] =~ m|^ L< / ( [^\>]+ ) > $|x ) {
+          $f->[$_] = '#' . ( $todos->{$1}{idx} || die "Dangling DEP-link on todo '$1'\n" );
+        }
+      }
+    }
+  }
+
+  $todos;
+}
+
+sub print_todo {
+  my $todos = shift or die "No todos?!";
+
+  require Text::SimpleTable;
+  my $tb = Text::SimpleTable->new( [ 1 => '#' ], [ 44 => 'Title' ], [ 29 => 'Flags' ] );
+
+  my $cnt;
+  my $cur_sect = '';
+  for my $todo_name (sort { $todos->{$a}{idx} <=> $todos->{$b}{idx} } keys %$todos) {
+    $tb->hr;
+    my $lines;
+    for my $flag (sort keys %{ $todos->{$todo_name}{flags} } ) {
+      my $f = 
+      $tb->row(
+        ($lines++ ? ('', '') : ($todos->{$todo_name}{idx}, $todo_name) ),
+        join "\n", map { join ': ', $flag, $_||() } @{$todos->{$todo_name}{flags}{$flag}},
+      );
+    }
+    $tb->row( $todos->{$todo_name}{idx}, $todo_name, '') unless $lines;
+  }
+
+  print $tb->draw;
+}
+
+###
+# Why aren't we using a proper POD-parser or even better some sort of grammar?
+# Because we want to keep the format simple, and eye-ball-able. If it can not
+# be easily described by one regular expression (even if the regex itself is
+# rather complex) - it likely isn't very easy to read either.
+# This would be bad, very bad.
+
+sub parse_flags {
+  my $raw_flags = shift
+    or return {};
+
+  my %flags;
+
+  for my $flag ( split /\s*\n+\s*/, $raw_flags ) {
+    next unless $flag;
+    my ($f, $v) = split /\s*\:\s*/, $flag, 2;
+
+    push @{$flags{$f}}, $v;
+  }
+
+  \%flags;
+}
+
+sub parse_todo {
+  my $fn = shift;
+
+  my $entire_file = do { local(@ARGV, $/) = ($fn); <> };
+
+  my ($todo_pod) = $entire_file =~ /
+    ^ =head1 \s+ TODOs \n
+    \n
+    (?: ^ (?: \s* | = [^\n]* ) \n )*?  # optional commented out merge instructions
+    ( ^ =head2 \s+ .+? (?= ^=head1 | \z ) )
+  /xsmg or die "Malformed POD in $fn - no TODOs heading\n";
+
+# parse loop
+  my ($todos, $current_section);
+  while( $todo_pod =~ /
+
+    (?: ^=head2 \s+ ( [^\n]+ ) \n             # possible section as head2
+      \n                                )?
+
+    ( ^=head3 \s+ ) ( [^\n]+ ) \n             # single line description as head3, with its prefix
+      \n
+
+    (?: ^=over \s+ (.+?) \s+ ^\=back \n       # possible flags
+      \n                                )?
+
+    \s* ( .*? ) (?=                           # everything else space-stripped until next head or eof
+       \s* (?: ^ =head[123] | \z ) )
+
+  /xmsg) {
+    my ($section, $todo_prefix, $todo_name, $flags, $desc) = ($1, $2, $3, $4, $5);
+
+    die "Duplicate TODO $todo_name\n" if $todos->{$todo_name};
+
+    $todos->{$todo_name} = {
+      idx => (keys %$todos) + 1,
+      line => ( (substr $entire_file, 0, index( $entire_file, $todo_prefix . $todo_name ) ) =~ tr/\n// ) + 1,
+      flags => parse_flags($flags),
+      section => (defined $section
+        ? $current_section = $section
+        : $current_section || ''
+      ),
+      description => $desc,
+    };
+  }
+
+  die "Malformed todo file $fn - no TODOs extracted\n"
+    unless $todos;
+}

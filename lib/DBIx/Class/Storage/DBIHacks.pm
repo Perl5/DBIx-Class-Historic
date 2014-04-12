@@ -429,7 +429,7 @@ sub _resolve_aliastypes_from_select_args {
       ),
     ],
     selecting => [
-      map { $sql_maker->_recurse_fields($_) } @{$attrs->{select}},
+      map { ($sql_maker->_recurse_fields($_))[0] } @{$attrs->{select}},
     ],
     ordering => [
       map { $_->[0] } $self->_extract_order_criteria ($attrs->{order_by}, $sql_maker),
@@ -997,19 +997,37 @@ sub _extract_fixed_condition_columns {
 
   my @cols;
   for my $lhs (keys %$where) {
+    my $val = $where->{$lhs};
+
     if ($lhs =~ /^\-and$/i) {
-      push @cols, ref $where->{$lhs} eq 'ARRAY'
-        ? ( map { @{ $self->_extract_fixed_condition_columns($_) } } @{$where->{$lhs}} )
-        : @{ $self->_extract_fixed_condition_columns($where->{$lhs}) }
-      ;
+      if (ref $val eq 'ARRAY') {
+        my @conds = @$val;
+        while (@conds) {
+          my $cond = shift @conds;
+          if (!ref $cond) {
+            my $condval = shift @conds;
+            push @cols, @{$self->_extract_fixed_condition_columns({ $cond => $condval })}
+              unless $cond =~ /^\-/;
+          }
+          elsif (ref $cond eq 'HASH') {
+            push @cols, @{$self->_extract_fixed_condition_columns($cond)};
+          }
+        }
+      }
     }
     elsif ($lhs !~ /^\-/) {
-      my $val = $where->{$lhs};
-
       push @cols, $lhs if (defined $val and (
         ! ref $val
           or
-        (ref $val eq 'HASH' and keys %$val == 1 and defined $val->{'='})
+        (ref $val eq 'ARRAY' and (
+          (@$val == 1 and defined $val->[0])
+            or
+          (@$val > 1 and defined $val->[0] and $val->[0] =~ /^\-and$/i
+             and @{$self->_extract_fixed_condition_columns({ -and => [ map { $lhs => $_ } $val->[1..$#{$val}] ] })})
+        ))
+          or
+        (ref $val eq 'HASH' and keys %$val == 1 and defined $val->{'='}
+           and @{$self->_extract_fixed_condition_columns({ $lhs => $val->{'='} })})
       ));
     }
   }

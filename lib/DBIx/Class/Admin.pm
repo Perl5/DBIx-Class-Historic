@@ -1,5 +1,8 @@
 package DBIx::Class::Admin;
 
+use warnings;
+use strict;
+
 # check deps
 BEGIN {
   use DBIx::Class;
@@ -7,15 +10,12 @@ BEGIN {
     unless DBIx::Class::Optional::Dependencies->req_ok_for ('admin');
 }
 
-use JSON::Any qw(DWIW PP JSON CPANEL XS);
-use Moose;
-use MooseX::Types::Moose qw/Int Str Any Bool/;
-use DBIx::Class::Admin::Types qw/DBICConnectInfo DBICHashRef/;
-use MooseX::Types::JSON qw(JSON);
-use MooseX::Types::Path::Class qw(Dir File);
-use MooseX::Types::LoadableClass qw(LoadableClass);
+use Moo;
 use Try::Tiny;
-use namespace::autoclean;
+use Module::Runtime ();
+use Sub::Quote 'quote_sub';
+use DBIx::Class::_Types qw(Path Str Bool DBICConnectInfo DBICHashRef);
+use namespace::clean;
 
 =head1 NAME
 
@@ -68,10 +68,12 @@ the class of the schema to load
 =cut
 
 has 'schema_class' => (
-  is  => 'ro',
-  isa => LoadableClass,
+  is => 'ro',
+  isa => quote_sub(q{
+    $_[0] =~ qr/\A$Module::Runtime::module_name_rx\z/ or die "$_[0] is not a class name\n";
+    $_[0]->isa('DBIx::Class::Schema') or die "$_[0] is not a DBIC schema\n";
+  }),
 );
-
 
 =head2 schema
 
@@ -80,14 +82,16 @@ A pre-connected schema object can be provided for manipulation
 =cut
 
 has 'schema' => (
-  is          => 'ro',
-  isa         => 'DBIx::Class::Schema',
-  lazy_build  => 1,
+  is => 'lazy',
+  isa => quote_sub(q{
+    $_[0]->isa('DBIx::Class::Schema') or die "$_[0] is not a DBIC schema\n";
+  })
 );
 
 sub _build_schema {
   my ($self)  = @_;
 
+  Module::Runtime::require_module($self->schema_class);
   $self->connect_info->[3]{ignore_version} = 1;
   return $self->schema_class->connect(@{$self->connect_info});
 }
@@ -112,8 +116,7 @@ a hash ref or json string to be used for identifying data to manipulate
 
 has 'where' => (
   is      => 'rw',
-  isa     => DBICHashRef,
-  coerce  => 1,
+  isa     => DBICHashRef(coerce => 1),
 );
 
 
@@ -125,8 +128,7 @@ a hash ref or json string to be used for inserting or updating data
 
 has 'set' => (
   is      => 'rw',
-  isa     => DBICHashRef,
-  coerce  => 1,
+  isa     => DBICHashRef(coerce => 1),
 );
 
 
@@ -138,8 +140,7 @@ a hash ref or json string to be used for passing additional info to the ->search
 
 has 'attrs' => (
   is      => 'rw',
-  isa     => DBICHashRef,
-  coerce  => 1,
+  isa     => DBICHashRef(coerce => 1),
 );
 
 
@@ -151,9 +152,8 @@ connect_info the arguments to provide to the connect call of the schema_class
 
 has 'connect_info' => (
   is          => 'ro',
-  isa         => DBICConnectInfo,
+  isa         => DBICConnectInfo(coerce => 1),
   lazy_build  => 1,
-  coerce      => 1,
 );
 
 sub _build_connect_info {
@@ -172,8 +172,7 @@ The config file should be in a format readable by Config::Any.
 
 has config_file => (
   is      => 'ro',
-  isa     => File,
-  coerce  => 1,
+  isa     => Path(coerce => 1),
 );
 
 
@@ -199,7 +198,7 @@ config_stanza will still be required.
 
 has config => (
   is          => 'ro',
-  isa         => DBICHashRef,
+  isa         => DBICHashRef(coerce => 1),
   lazy_build  => 1,
 );
 
@@ -225,8 +224,7 @@ The location where sql ddl files should be created or found for an upgrade.
 
 has 'sql_dir' => (
   is      => 'ro',
-  isa     => Dir,
-  coerce  => 1,
+  isa     => Path(coerce => 1),
 );
 
 
@@ -557,9 +555,6 @@ sub select {
 
 sub _confirm {
   my ($self) = @_;
-
-  # mainly here for testing
-  return 1 if ($self->meta->get_attribute('_confirm')->get_value($self));
 
   print "Are you sure you want to do this? (type YES to confirm) \n";
   my $response = <STDIN>;

@@ -221,7 +221,7 @@ sub _FirstSkip {
 Depending on the resultset attributes one of:
 
  SELECT * FROM (
-  SELECT *, ROWNUM rownum__index FROM (
+  SELECT *, ROWNUM AS rownum__index FROM (
    SELECT ...
   ) WHERE ROWNUM <= ($limit+$offset)
  ) WHERE rownum__index >= ($offset+1)
@@ -229,7 +229,7 @@ Depending on the resultset attributes one of:
 or
 
  SELECT * FROM (
-  SELECT *, ROWNUM rownum__index FROM (
+  SELECT *, ROWNUM AS rownum__index FROM (
     SELECT ...
   )
  ) WHERE rownum__index BETWEEN ($offset+1) AND ($limit+$offset)
@@ -286,7 +286,7 @@ EOS
 
     return <<EOS;
 SELECT $sq_attrs->{selection_outer} FROM (
-  SELECT $sq_attrs->{selection_outer}, ROWNUM $idx_name FROM (
+  SELECT $sq_attrs->{selection_outer}, ROWNUM AS $idx_name FROM (
     SELECT $sq_attrs->{selection_inner} $sq_attrs->{query_leftover}${order_group_having}
   ) $qalias WHERE ROWNUM <= ?
 ) $qalias WHERE $idx_name >= ?
@@ -297,7 +297,7 @@ EOS
 
     return <<EOS;
 SELECT $sq_attrs->{selection_outer} FROM (
-  SELECT $sq_attrs->{selection_outer}, ROWNUM $idx_name FROM (
+  SELECT $sq_attrs->{selection_outer}, ROWNUM AS $idx_name FROM (
     SELECT $sq_attrs->{selection_inner} $sq_attrs->{query_leftover}${order_group_having}
   ) $qalias
 ) $qalias WHERE $idx_name BETWEEN ? AND ?
@@ -725,15 +725,12 @@ sub _subqueried_limit_attrs {
 
   my ($re_sep, $re_alias) = map { quotemeta $_ } ( $self->{name_sep}, $rs_attrs->{alias} );
 
-  # insulate from the multiple _recurse_fields calls below
-  local $self->{select_bind};
-
   # correlate select and as, build selection index
   my (@sel, $in_sel_index);
   for my $i (0 .. $#{$rs_attrs->{select}}) {
 
     my $s = $rs_attrs->{select}[$i];
-    my $sql_sel = $self->_recurse_fields ($s);
+    my ($sql_sel) = $self->_recurse_fields ($s);
     my $sql_alias = (ref $s) eq 'HASH' ? $s->{-as} : undef;
 
     push @sel, {
@@ -741,7 +738,7 @@ sub _subqueried_limit_attrs {
       sql => $sql_sel,
       unquoted_sql => do {
         local $self->{quote_char};
-        $self->_recurse_fields ($s);
+        ($self->_recurse_fields ($s))[0];
       },
       as =>
         $sql_alias

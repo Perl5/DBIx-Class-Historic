@@ -141,6 +141,11 @@ sub new {
 
   $source->add_columns('col1' => \%col1_info, 'col2' => \%col2_info, ...);
 
+  $source->add_columns(
+    'col1' => { data_type => 'integer', is_nullable => 1, ... },
+    'col2' => { data_type => 'text',    is_auto_increment => 1, ... },
+  );
+
 Adds columns to the result source. If supplied colname => hashref
 pairs, uses the hashref as the L</column_info> for that column. Repeated
 calls of this method will add more columns, not replace them.
@@ -156,64 +161,29 @@ attribute already exists. Using this without a hashref
 (C<< $source->add_columns(qw/+col1 +col2/) >>) is legal, but useless --
 it does the same thing it would do without the plus.
 
-The contents of the column_info are not set in stone. The following
-keys are currently recognised/used by DBIx::Class:
+The contents of the column_info are not set in stone and can serve subtly
+different I<types> of purpose.  The following keys are currently
+recognised/used by DBIx::Class:
+
+=head3 Data Manipulation (or DML)
+
+These affect how DBIx::Class I<operates on> (insert, update, search or delete,
+etc) your data.
 
 =over 4
-
-=item accessor
-
-   { accessor => '_name' }
-
-   # example use, replace standard accessor with one of your own:
-   sub name {
-       my ($self, $value) = @_;
-
-       die "Name cannot contain digits!" if($value =~ /\d/);
-       $self->_name($value);
-
-       return $self->_name();
-   }
-
-Use this to set the name of the accessor method for this column. If unset,
-the name of the column will be used.
-
-=item data_type
-
-   { data_type => 'integer' }
-
-This contains the column type. It is automatically filled if you use the
-L<SQL::Translator::Producer::DBIx::Class::File> producer, or the
-L<DBIx::Class::Schema::Loader> module.
-
-Currently there is no standard set of values for the data_type. Use
-whatever your database supports.
-
-=item size
-
-   { size => 20 }
-
-The length of your column, if it is a column type that can have a size
-restriction. This is currently only used to create tables from your
-schema, see L<DBIx::Class::Schema/deploy>.
-
-=item is_nullable
-
-   { is_nullable => 1 }
-
-Set this to a true value for a columns that is allowed to contain NULL
-values, default is false. This is currently only used to create tables
-from your schema, see L<DBIx::Class::Schema/deploy>.
 
 =item is_auto_increment
 
    { is_auto_increment => 1 }
 
-Set this to a true value for a column whose value is somehow
-automatically set, defaults to false. This is used to determine which
-columns to empty when cloning objects using
-L<DBIx::Class::Row/copy>. It is also used by
-L<DBIx::Class::Schema/deploy>.
+Set this to a true value for a column whose value is somehow automatically set.
+
+This is used to determine which columns to empty when cloning objects using
+L<DBIx::Class::Row/copy>.  It defaults to false.
+
+It can also be used during deployment (when using
+L<DBIx::Class::Schema/deploy>).  See the 'is_auto_increment' entry below under
+L</data_manipulation__or_dml_>
 
 =item is_numeric
 
@@ -228,27 +198,6 @@ instead of the usual C<eq>
 If not specified the storage class will attempt to figure this out on
 first access to the column, based on the column C<data_type>. The
 result will be cached in this attribute.
-
-=item is_foreign_key
-
-   { is_foreign_key => 1 }
-
-Set this to a true value for a column that contains a key from a
-foreign table, defaults to false. This is currently only used to
-create tables from your schema, see L<DBIx::Class::Schema/deploy>.
-
-=item default_value
-
-   { default_value => \'now()' }
-
-Set this to the default value which will be inserted into a column by
-the database. Can contain either a value or a function (use a
-reference to a scalar e.g. C<\'now()'> if you want a function). This
-is currently only used to create tables from your schema, see
-L<DBIx::Class::Schema/deploy>.
-
-See the note on L<DBIx::Class::Row/new> for more information about possible
-issues related to db-side default values.
 
 =item sequence
 
@@ -283,13 +232,127 @@ L<data_type|DBIx::Class::ResultSource/data_type> whose values you want to
 automatically generate using C<NEWID()>, unless they are a primary key in which
 case this will be done anyway.
 
+=back
+
+=head3 DBIx::Class (only) behaviour
+
+This is neither a data definition or data manipulation feature, rather affects
+DBIx::Class behaviour itself.
+
+=item accessor
+
+   { accessor => '_name' }
+
+   # example use, replace standard accessor with one of your own:
+   sub name {
+       my ($self, $value) = @_;
+
+       die "Name cannot contain digits!" if($value =~ /\d/);
+       $self->_name($value);
+
+       return $self->_name();
+   }
+
+Use this to set the name of the accessor method for this column. If unset, the
+name of the column will be used.  Note this only changes the name of the class
+accessor method, e.g. $rs->_name(). It B<does not> change the underlying
+database column name, which is what you should use in the arguments passed to
+methods like $rs->search() or $rs->update().
+
+Common uses for 'accessor' include:
+
+=over 4
+
+=item Database column name is not a valid class method
+
+For example, "Foo Bar" or a name starting with a digit.
+
+=item Adding extra (validation) logic when setting.
+
+See the example above for 'name' which ensures your name cannot contain a
+digit.  Another might be checking that a Date of Birth is actually a valid
+date.
+
+=back
+
+Additionally, setting 'accessor' to undef prevents any get/set methods being
+generated for that column.
+
+    { accessor => undef }
+
+=head3 Data Definition (or DDL)
+
+These affect behaviour when creating SQL tables during the I<deployment> of a
+DBIx::Class schema.  See L<DBIx::Class::Schema/deploy> or
+L<DBIx::Class::Manual::Cookbook/Creating_DDL_SQL>.
+
+They are ignored when I<operating> on your data (inserting, updating,
+searching, deleting) except where noted.
+
+=over 4
+
+=item data_type
+
+   { data_type => 'integer' }
+
+This contains the column type. It is automatically filled if you use the
+L<SQL::Translator::Producer::DBIx::Class::File> producer, or the
+L<DBIx::Class::Schema::Loader> module.
+
+Currently there is no standard set of values for the data_type. Use
+whatever your database supports.
+
+=item size
+
+   { size => 20 }
+
+The length of your column, if it is a column type that can have a size
+restriction.
+
+=item is_nullable
+
+   { is_nullable => 1 }
+
+Set this to a true value for a column that is allowed to contain NULL
+values, default is false.
+
+=item is_auto_increment
+
+   { is_auto_increment => 1 }
+
+Set to true when a column's value is automatically set by your database engine.
+
+It is also used when cloning objects.  See 'is_auto_increment' above in the
+L</data_manipulation__or_dml_> section.
+
+=item is_foreign_key
+
+   { is_foreign_key => 1 }
+
+Set this to a true value for a column that contains a key from a
+foreign table, defaults to false.
+
+=item default_value
+
+   { default_value => \'now()' }
+
+Set this to the default value which will be inserted into a column by
+the database. Can contain either a value or a function (use a
+reference to a scalar e.g. C<\'now()'> if you want a function).
+
+See the note on L<DBIx::Class::Row/new> for more information about possible
+issues related to db-side default values.
+
 =item extra
 
-This is used by L<DBIx::Class::Schema/deploy> and L<SQL::Translator>
-to add extra non-generic data to the column. For example: C<< extra
-=> { unsigned => 1} >> is used by the MySQL producer to set an integer
-column to unsigned. For more details, see
-L<SQL::Translator::Producer::MySQL>.
+This is used by L<DBIx::Class::Schema/deploy> and L<SQL::Translator> to add
+extra non-generic data to the column.  Check the documentation for your
+database engine; some examples that use this include
+L<SQL::Translator::Producer::MySQL>, L<SQL::Translator::Producer::SQLServer>,
+L<SQL::Translator::Producer::XML::SQLFairy>.
+
+For example: C<< extra => { unsigned => 1 } >> is used by the MySQL producer to
+set an integer column to unsigned.
 
 =back
 
@@ -1621,7 +1684,8 @@ sub _resolve_join {
                -alias => $as,
                -relation_chain_depth => ( $seen->{-relation_chain_depth} || 0 ) + 1,
              },
-             scalar $self->_resolve_condition($rel_info->{cond}, $as, $alias, $join)
+             scalar $self->_resolve_condition($rel_info->{cond}, $as, $alias, $join),
+             $rel_info->{attrs}
           ];
   }
 }

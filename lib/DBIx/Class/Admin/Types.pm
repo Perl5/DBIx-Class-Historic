@@ -44,6 +44,8 @@ coerce DBICConnectInfo,
 
 sub _json_to_data {
   my ($json_str) = @_;
+  require JSON::Any;
+  JSON::Any->import(qw(DWIW XS JSON));
   my $json = JSON::Any->new(allow_barekey => 1, allow_singlequote => 1, relaxed=>1);
   my $ret = $json->jsonToObj($json_str);
   return $ret;
