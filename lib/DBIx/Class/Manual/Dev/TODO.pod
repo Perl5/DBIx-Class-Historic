@@ -37,6 +37,12 @@ paragraphs detailing the reasons for this branch to exist.
 
 =head2 Refactoring / Cleanup / Architectural improvements
 
+=head3 Rename relationship-creation methods
+
+People find C<belongs_to> and C<has_many> confusing.  RT#83712 has an initial
+attempt at renaming C<belongs_to> to C<refers_to>, which seems to be generally
+favoured; but it needs to be fleshed out for the other relationship types.
+
 =head3 Cleanup/rewrite DBIx::Class::ResultSet::_merge_joinpref_attr()
 
 This code is well tested (it even has a dedicated test file to just test its
@@ -58,8 +64,6 @@ Moose is slow. *Really* slow for CLI. We can do better.
 =head3 txn_do opts/ dbh_do
 
 =head3 find_or_create claify (RT)
-
-=head3 Rename relationship-creation methods
 
 =head2 Extensions / New Features
 
