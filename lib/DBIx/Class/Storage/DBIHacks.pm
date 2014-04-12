@@ -429,7 +429,7 @@ sub _resolve_aliastypes_from_select_args {
       ),
     ],
     selecting => [
-      map { $sql_maker->_recurse_fields($_) } @{$attrs->{select}},
+      map { ($sql_maker->_recurse_fields($_))[0] } @{$attrs->{select}},
     ],
     ordering => [
       map { $_->[0] } $self->_extract_order_criteria ($attrs->{order_by}, $sql_maker),

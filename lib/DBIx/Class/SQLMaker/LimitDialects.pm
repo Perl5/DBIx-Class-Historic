@@ -725,15 +725,12 @@ sub _subqueried_limit_attrs {
 
   my ($re_sep, $re_alias) = map { quotemeta $_ } ( $self->{name_sep}, $rs_attrs->{alias} );
 
-  # insulate from the multiple _recurse_fields calls below
-  local $self->{select_bind};
-
   # correlate select and as, build selection index
   my (@sel, $in_sel_index);
   for my $i (0 .. $#{$rs_attrs->{select}}) {
 
     my $s = $rs_attrs->{select}[$i];
-    my $sql_sel = $self->_recurse_fields ($s);
+    my ($sql_sel) = $self->_recurse_fields ($s);
     my $sql_alias = (ref $s) eq 'HASH' ? $s->{-as} : undef;
 
     push @sel, {
@@ -741,7 +738,7 @@ sub _subqueried_limit_attrs {
       sql => $sql_sel,
       unquoted_sql => do {
         local $self->{quote_char};
-        $self->_recurse_fields ($s);
+        ($self->_recurse_fields ($s))[0];
       },
       as =>
         $sql_alias
