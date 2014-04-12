@@ -21,6 +21,8 @@ foreach (
     [qw(artistid)] ],
   [ "= array" => { artistid => { '=' => [ 1 ], }, rank => { '=' => [ 1, 2 ] } },
     [qw(artistid)] ],
+  [ "array -and" => { artistid => [ -and => 1, 2 ] },
+    [qw(artistid)] ],
 ) {
   my ($desc, $where, $exp) = @$_;
 

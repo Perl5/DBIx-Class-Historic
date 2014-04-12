@@ -1019,7 +1019,12 @@ sub _extract_fixed_condition_columns {
       push @cols, $lhs if (defined $val and (
         ! ref $val
           or
-        (ref $val eq 'ARRAY' and @$val == 1 and defined $val->[0])
+        (ref $val eq 'ARRAY' and (
+          (@$val == 1 and defined $val->[0])
+            or
+          (@$val > 1 and defined $val->[0] and $val->[0] =~ /^\-and$/i
+             and @{$self->_extract_fixed_condition_columns({ -and => [ map { $lhs => $_ } $val->[1..$#{$val}] ] })})
+        ))
           or
         (ref $val eq 'HASH' and keys %$val == 1 and defined $val->{'='}
            and @{$self->_extract_fixed_condition_columns({ $lhs => $val->{'='} })})
