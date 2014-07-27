@@ -40,6 +40,7 @@ use mro 'c3';
 
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
+use DBIx::Class::_Util 'rv_guard';
 use namespace::clean;
 
 __PACKAGE__->mk_group_accessors (simple => qw/quote_char name_sep limit_dialect/);
@@ -244,12 +245,9 @@ sub _recurse_fields {
 
     my $as = delete $hash{-as};   # if supplied
 
-    my ($func, $rhs, @toomany) = %hash;
-
-    # there should be only one pair
-    if (@toomany) {
-      $self->throw_exception( "Malformed select argument - too many keys in hash: " . join (',', keys %$fields ) );
-    }
+    ( my ($func, $rhs), rv_guard {
+      $self->throw_exception( "Malformed select argument - too many keys in hash: " . join (',', keys %$fields ) )
+    }) = %hash;
 
     if (lc ($func) eq 'distinct' && ref $rhs eq 'ARRAY' && @$rhs > 1) {
       $self->throw_exception (
@@ -423,13 +421,12 @@ sub _from_chunk_to_sql {
       $$fromspec->[0];
     }
     elsif (ref $fromspec eq 'HASH') {
-      my ($as, $table, $toomuch) = ( map
+      ( my ($as, $table), rv_guard {
+        $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$_[0]' key present" )
+      }) = ( map
         { $_ => $fromspec->{$_} }
         ( grep { $_ !~ /^\-/ } keys %$fromspec )
       );
-
-      $self->throw_exception( "Only one table/as pair expected in from-spec but an exra '$toomuch' key present" )
-        if defined $toomuch;
 
       ($self->_from_chunk_to_sql($table), $self->_quote($as) );
     }

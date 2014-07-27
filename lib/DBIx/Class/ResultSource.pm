@@ -9,7 +9,7 @@ use DBIx::Class::ResultSet;
 use DBIx::Class::ResultSourceHandle;
 
 use DBIx::Class::Carp;
-use DBIx::Class::_Util 'UNRESOLVABLE_CONDITION';
+use DBIx::Class::_Util qw(UNRESOLVABLE_CONDITION rv_guard);
 use SQL::Abstract 'is_literal_value';
 use Devel::GlobalDestruction;
 use Try::Tiny;
@@ -649,12 +649,13 @@ sub _pri_cols_or_die {
 # inference)
 sub _single_pri_col_or_die {
   my $self = shift;
-  my ($pri, @too_many) = $self->_pri_cols_or_die;
+  (my ($pri), rv_guard {
+    $self->throw_exception( sprintf(
+      "Operation requires a single-column primary key declared on '%s'",
+      $self->source_name || $self->result_class || $self->name || 'Unknown source...?',
+    ));
+  }) = $self->_pri_cols_or_die;
 
-  $self->throw_exception( sprintf(
-    "Operation requires a single-column primary key declared on '%s'",
-    $self->source_name || $self->result_class || $self->name || 'Unknown source...?',
-  )) if @too_many;
   return $pri;
 }
 
@@ -1862,11 +1863,9 @@ sub _resolve_relationship_condition {
     $cref_args->{self_rowobj} = $cref_args->{self_result_object}
       if exists $cref_args->{self_result_object};
 
-    ($ret->{condition}, $ret->{join_free_condition}, my @extra) = $args->{condition}->($cref_args);
-
-    # FIXME sanity check
-    carp_unique('A custom condition coderef can return at most 2 conditions: extra return values discarded')
-      if @extra;
+    ($ret->{condition}, $ret->{join_free_condition}, rv_guard {
+      carp_unique("A custom condition coderef can return at most 2 conditions: extra return value '$_[0]' discarded")
+    }) = $args->{condition}->($cref_args);
 
     if (my $jfc = $ret->{join_free_condition}) {
 

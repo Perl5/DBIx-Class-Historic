@@ -98,7 +98,7 @@ sub qsub ($) { goto &quote_sub }  # no point depping on new Moo just for this
 
 use base 'Exporter';
 our @EXPORT_OK = qw(
-  sigwarn_silencer modver_gt_or_eq
+  rv_guard sigwarn_silencer modver_gt_or_eq
   fail_on_internal_wantarray fail_on_internal_call
   refdesc refcount hrefaddr is_exception
   quote_sub qsub perlstring
@@ -292,6 +292,34 @@ sub fail_on_internal_call {
       }),
     ), 'with_stacktrace');
   }
+}
+
+{
+  package # no pausing
+    DBIx::Class::_Util::RVGuard;
+
+  for (qw(FETCH FETCHSIZE STORESIZE EXISTS DELETE PUSH POP SHIFT UNSHIFT SPLICE UNTIE )) {
+    no strict 'refs';
+    *{__PACKAGE__. "::$_"} = sub { Carp::croak ( (caller(1))[3] . ' must be invoked in lvalue list context' ) }
+  }
+
+  sub TIEARRAY { bless { action => $_[1] }, $_[0] }
+
+  sub EXTEND () { }
+
+  sub CLEAR () { }  # FIXME this will be always called... perhaps there is a way to XS the whole thing
+
+  sub STORE {
+    $_[0]->{action}->($_[2]);
+    return;
+  }
+}
+
+sub rv_guard (&) :lvalue {
+  croak( (caller(0))[3] . ' must be invoked in lvalue list context' )
+    unless wantarray;
+  tie my @guard, 'DBIx::Class::_Util::RVGuard', @_;
+  @guard;
 }
 
 1;
