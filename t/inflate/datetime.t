@@ -22,7 +22,7 @@ isa_ok($event->starts_at, 'DateTime', 'DateTime returned');
 
 # klunky, but makes older Test::More installs happy
 my $starts = $event->starts_at;
-is("$starts", '2006-04-25T22:24:33', 'Correct date/time');
+is("$starts", '2006-04-25 22:24:33', 'Correct date/time');
 
 my $dt_warn_re = qr/DateTime objects.+not supported properly/;
 
@@ -79,7 +79,7 @@ isnt(ref($event->skip_inflation), 'DateTime', 'No DateTime returned for skip inf
 
 # klunky, but makes older Test::More installs happy
 my $createo = $event->created_on;
-is("$createo", '2006-06-22T21:00:05', 'Correct date/time');
+is("$createo", '2006-06-22 21:00:05', 'Correct date/time');
 
 my $created_cron = $created->created_on;
 
@@ -88,11 +88,11 @@ is("$created_cron", '2006-06-23T00:00:00', 'Correct date/time');
 
 ## varchar field using inflate_date => 1
 my $varchar_date = $event->varchar_date;
-is("$varchar_date", '2006-07-23T00:00:00', 'Correct date/time');
+is("$varchar_date", '2006-07-23 00:00:00', 'Correct date/time');
 
 ## varchar field using inflate_datetime => 1
 my $varchar_datetime = $event->varchar_datetime;
-is("$varchar_datetime", '2006-05-22T19:05:07', 'Correct date/time');
+is("$varchar_datetime", '2006-05-22 19:05:07', 'Correct date/time');
 
 ## skip inflation field
 my $skip_inflation = $event->skip_inflation;

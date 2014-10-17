@@ -5,6 +5,7 @@ use warnings;
 use base qw/DBIx::Class/;
 use DBIx::Class::Carp;
 use Try::Tiny;
+use Scalar::Util qw/blessed/;
 use namespace::clean;
 
 =head1 NAME
@@ -198,7 +199,9 @@ sub _flate_or_fallback
   my $method = $parser->can($preferred_method) || sprintf($method_fmt, 'datetime');
 
   return try {
-    $parser->$method($value);
+    my $thing = $parser->$method($value);
+    $thing->set_formatter($parser) if blessed $thing;
+    $thing;
   }
   catch {
     $self->throw_exception ("Error while inflating '$value' for $info->{__dbic_colname} on ${self}: $_")

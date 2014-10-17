@@ -45,12 +45,12 @@ foreach my $tbl (qw/EventTZ EventTZDeprecated/) {
 
   isa_ok($loaded_event->starts_at, 'DateTime', 'DateTime returned');
   $starts_at = $loaded_event->starts_at;
-  is("$starts_at", '2007-12-31T00:00:00', 'Loaded correct date/time using timezone');
+  is("$starts_at", '2007-12-31 00:00:00', 'Loaded correct date/time using timezone');
   is($starts_at->time_zone->name, 'America/Chicago', 'Correct timezone');
 
   isa_ok($loaded_event->created_on, 'DateTime', 'DateTime returned');
   $created_on = $loaded_event->created_on;
-  is("$created_on", '2006-01-31T12:34:56', 'Loaded correct timestamp using timezone');
+  is("$created_on", '2006-01-31 12:34:56', 'Loaded correct timestamp using timezone');
   is($created_on->time_zone->name, 'America/Chicago', 'Correct timezone');
 
   # Test floating timezone warning
