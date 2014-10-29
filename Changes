@@ -7,6 +7,9 @@ Revision history for DBIx::Class
         - Fix updating multiple CLOB/BLOB columns on Oracle
         - Fix exception on complex update/delete under a replicated setup
           http://lists.scsys.co.uk/pipermail/dbix-class/2015-January/011903.html
+        - Fix uninitialized warnings on empty hashes passed to join/prefetch
+          https://github.com/vanstyn/RapidApp/commit/6f41f6e48 and
+          http://lists.scsys.co.uk/pipermail/dbix-class/2015-February/011921.html
 
     * Misc
         - Remove warning about potential side effects of RT#79576 (scheduled)
