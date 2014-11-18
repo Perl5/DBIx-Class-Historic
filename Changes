@@ -4,6 +4,7 @@ Revision history for DBIx::Class
         - Relax the 'self_result_object' argument check in the relationship
           resolution codepath, restoring exotic uses of inflate_result
           http://lists.scsys.co.uk/pipermail/dbix-class/2015-January/011876.html
+        - Fix updating multiple CLOB/BLOB columns on Oracle
 
     * Misc
         - Remove warning about potential side effects of RT#79576 (scheduled)
