@@ -1,5 +1,10 @@
 Revision history for DBIx::Class
 
+    * Fixes
+        - Relax the 'self_result_object' argument check in the relationship
+          resolution codepath, restoring exotic uses of inflate_result
+          http://lists.scsys.co.uk/pipermail/dbix-class/2015-January/011876.html
+
 0.082810 2014-10-25 13:58 (UTC)
     * Fixes
         - Fix incorrect collapsing-parser source being generated in the
