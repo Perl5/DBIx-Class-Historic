@@ -14,6 +14,7 @@ use Scalar::Util qw( blessed weaken isweak refaddr );
 # FIXME - somehow breaks ResultSetManager, do not remove until investigated
 use DBIx::Class::ResultSet;
 
+use Moo;
 use namespace::clean;
 
 my @hashref_attributes = qw(
@@ -23,12 +24,20 @@ my @hashref_attributes = qw(
 my @arrayref_attributes = qw(
   _ordered_columns _primaries
 );
-__PACKAGE__->mk_group_accessors(simple =>
+
+has [
   @hashref_attributes,
   @arrayref_attributes,
   qw( source_name name column_info_from_storage sqlt_deploy_callback ),
+] => (
+  is => 'rw',
 );
 
+has '+name' => ( default => "!!NAME NOT SET!!" );
+has '+sqlt_deploy_callback' => ( default => 'default_sqlt_deploy_hook' );
+
+# We use the CAG accessors for this due to the "load-on-get" logic
+# not being cleanly triggerable from within Moo
 __PACKAGE__->mk_group_accessors(component_class => qw/
   resultset_class
   result_class
@@ -121,6 +130,16 @@ Creates a new ResultSource object.  Not normally called directly by end users.
 
 =cut
 
+
+# FIXME
+#
+# <ribasushi> haarg: one more question - is there a straightforward way to inline BUILD/BUILDARGS ?
+# <ribasushi> ( I have both )
+# <haarg> not really.  it's something we probably should do, but don't currently.
+
+# Because there are spots that call ->new($rsrc_object) in the wild
+sub BUILDARGS { +{ %{ $_[1] || {} } } }
+
 {
   my $rsrc_registry;
 
@@ -132,19 +151,14 @@ Creates a new ResultSource object.  Not normally called directly by end users.
     } values %{ $rsrc_registry->{ refaddr($_[0]) }{ derivatives } }
   }
 
-  sub new {
-    my ($class, $attrs) = @_;
-    $class = ref $class if ref $class;
-
-    my $ancestor = delete $attrs->{__derived_from};
-
-    my $self = bless { %$attrs }, $class;
+  sub BUILD {
+    my $self = shift;
 
 
     DBIx::Class::_ENV_::ASSERT_NO_ERRONEOUS_METAINSTANCE_USE
       and
     # a constructor with 'name' as sole arg clearly isn't "inheriting" from anything
-    ( not ( keys(%$self) == 1 and exists $self->{name} ) )
+    ( not ( keys(%{$_[0]}) == 1 and exists $_[0]->{name} ) )
       and
     defined CORE::caller(1)
       and
@@ -159,6 +173,15 @@ Creates a new ResultSource object.  Not normally called directly by end users.
     local $Carp::CarpLevel = $Carp::CarpLevel + 1
       and
     Carp::confess("Incorrect instantiation of '$self': you almost certainly wanted to call ->clone() instead");
+
+
+    my $ancestor = delete $_[0]->{__derived_from};
+
+    # Allow complete transparency to subclasses: ->new( \%random_stuff )
+    %$self = (
+      %{$_[0]},
+      %$self,
+    );
 
 
     my $own_slot = $rsrc_registry->{
@@ -194,10 +217,8 @@ Creates a new ResultSource object.  Not normally called directly by end users.
     }
 
 
+    # not a default because we use the CAG accessors, see top of file
     $self->{resultset_class} ||= 'DBIx::Class::ResultSet';
-    $self->{name} ||= "!!NAME NOT SET!!";
-    $self->{_columns_info_loaded} ||= 0;
-    $self->{sqlt_deploy_callback} ||= 'default_sqlt_deploy_hook';
 
     $self->{$_} = { %{ $self->{$_} || {} } }
       for @hashref_attributes;

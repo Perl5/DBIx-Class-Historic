@@ -60,6 +60,8 @@ my $exceptions = {
     },
     'DBIx::Class::ResultSource' => {
         ignore => [qw/
+            BUILD
+            BUILDARGS
             compare_relationship_keys
             pk_depends_on
             resolve_condition
